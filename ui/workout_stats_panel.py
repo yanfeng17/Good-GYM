@@ -2,6 +2,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTabWidget,
                              QSizePolicy)
 from PyQt5.QtCore import Qt, pyqtSignal
 import datetime
+import json
+import os
+import sys
 
 from core.translations import Translations as T
 
@@ -23,26 +26,74 @@ class WorkoutStatsPanel(QWidget):
         super().__init__(parent)
         self.exercise_colors = AppStyles.EXERCISE_COLORS
         
-        # Use translation module to generate exercise name mappings
+        # Use translation module to generate exercise name mappings from JSON file
         self.update_exercise_mappings()
         
         # Initialize UI
         self.setup_ui()
     
+    def get_exercises_file_path(self):
+        """Get exercises.json file path, compatible with development and packaged environments"""
+        if getattr(sys, 'frozen', False):
+            # Packaged environment, data files are in temp directory
+            base_path = sys._MEIPASS
+            exercises_file = os.path.join(base_path, 'data', 'exercises.json')
+        else:
+            # Development environment, data files are in project directory
+            exercises_file = os.path.join('data', 'exercises.json')
+        
+        return exercises_file
+    
     def update_exercise_mappings(self):
-        """Update exercise name mappings"""
-        self.exercise_name_map = {
-            "squat": T.get("squat"),
-            "pushup": T.get("pushup"),
-            "situp": T.get("situp"),
-            "bicep_curl": T.get("bicep_curl"),
-            "lateral_raise": T.get("lateral_raise"),
-            "overhead_press": T.get("overhead_press"),
-            "leg_raise": T.get("leg_raise"),
-            "knee_raise": T.get("knee_raise"),
-            "knee_press": T.get("knee_press")
-        }
-        self.exercise_code_map = {v: k for k, v in self.exercise_name_map.items()}
+        """Update exercise name mappings from JSON file"""
+        exercises_file = self.get_exercises_file_path()
+        
+        try:
+            if os.path.exists(exercises_file):
+                with open(exercises_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    exercises = data.get('exercises', {})
+                    
+                    # Build exercise_name_map from JSON file
+                    exercise_map = {}
+                    current_lang = T.get_language()  # Get current language setting
+                    
+                    for exercise_type, config in exercises.items():
+                        # Get display name from JSON file based on current language
+                        if current_lang == 'zh':
+                            display_name = config.get('name_zh', '')
+                        elif current_lang == 'en':
+                            display_name = config.get('name_en', '')
+                        else:
+                            # Fallback to English if language not supported
+                            display_name = config.get('name_en', '')
+                        
+                        # If name not found in JSON, try translation module as fallback
+                        if not display_name:
+                            display_name = T.get(exercise_type)
+                        
+                        if display_name:
+                            exercise_map[exercise_type] = display_name
+                    
+                    if exercise_map:
+                        self.exercise_name_map = exercise_map
+                        self.exercise_code_map = {v: k for k, v in self.exercise_name_map.items()}
+                        return
+                    else:
+                        print(f"WARNING: No exercises found in {exercises_file}")
+                        self.exercise_name_map = {}
+                        self.exercise_code_map = {}
+                        return
+            
+            # File not found
+            print(f"ERROR: Exercises file not found at {exercises_file}")
+            print("Please ensure data/exercises.json exists")
+            self.exercise_name_map = {}
+            self.exercise_code_map = {}
+        except Exception as e:
+            print(f"ERROR loading exercises from JSON: {e}")
+            self.exercise_name_map = {}
+            self.exercise_code_map = {}
     
     def setup_ui(self):
         """Setup UI components"""

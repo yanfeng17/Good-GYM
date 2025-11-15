@@ -2,6 +2,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QComboBox, QGroupBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
+import json
+import os
+import sys
 from .styles import AppStyles
 from .custom_widgets import SwitchControl
 from core.translations import Translations as T
@@ -25,18 +28,8 @@ class ControlPanel(QWidget):
         super().__init__(parent)
         self.exercise_colors = AppStyles.EXERCISE_COLORS
         
-        # Initialize exercise type mappings
-        self.exercise_display_map = {
-            "overhead_press": T.get("overhead_press"),
-            "bicep_curl": T.get("bicep_curl"),
-            "squat": T.get("squat"),
-            "pushup": T.get("pushup"),
-            "situp": T.get("situp"),
-            "lateral_raise": T.get("lateral_raise"),
-            "leg_raise": T.get("leg_raise"),
-            "knee_raise": T.get("knee_raise"),
-            "knee_press": T.get("knee_press")
-        }
+        # Initialize exercise type mappings from JSON file
+        self.exercise_display_map = self.load_exercise_display_map()
         
         # Initialize model type mappings - only keep RTMPose options
         self.model_display_map = {
@@ -52,6 +45,63 @@ class ControlPanel(QWidget):
         # Setup layout
         self.layout = QVBoxLayout(self)
         self.setup_ui()
+    
+    def get_exercises_file_path(self):
+        """Get exercises.json file path, compatible with development and packaged environments"""
+        if getattr(sys, 'frozen', False):
+            # Packaged environment, data files are in temp directory
+            base_path = sys._MEIPASS
+            exercises_file = os.path.join(base_path, 'data', 'exercises.json')
+        else:
+            # Development environment, data files are in project directory
+            exercises_file = os.path.join('data', 'exercises.json')
+        
+        return exercises_file
+    
+    def load_exercise_display_map(self):
+        """Load exercise display map from JSON file"""
+        exercises_file = self.get_exercises_file_path()
+        
+        try:
+            if os.path.exists(exercises_file):
+                with open(exercises_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    exercises = data.get('exercises', {})
+                    
+                    # Build exercise_display_map from JSON file
+                    exercise_map = {}
+                    current_lang = T.get_language()  # Get current language setting
+                    
+                    for exercise_type, config in exercises.items():
+                        # Get display name from JSON file based on current language
+                        if current_lang == 'zh':
+                            display_name = config.get('name_zh', '')
+                        elif current_lang == 'en':
+                            display_name = config.get('name_en', '')
+                        else:
+                            # Fallback to English if language not supported
+                            display_name = config.get('name_en', '')
+                        
+                        # If name not found in JSON, try translation module as fallback
+                        if not display_name:
+                            display_name = T.get(exercise_type)
+                        
+                        if display_name:
+                            exercise_map[exercise_type] = display_name
+                    
+                    if exercise_map:
+                        print(f"Loaded {len(exercise_map)} exercises from {exercises_file}")
+                        return exercise_map
+                    else:
+                        print(f"WARNING: No exercises found in {exercises_file}")
+                        return {}
+            else:
+                print(f"ERROR: Exercises file not found at {exercises_file}")
+                print("Please ensure data/exercises.json exists")
+                return {}
+        except Exception as e:
+            print(f"ERROR loading exercises from JSON: {e}")
+            return {}
     
     def setup_ui(self):
         """Setup control panel UI"""
@@ -534,18 +584,8 @@ class ControlPanel(QWidget):
         
     def update_language(self):
         """Update interface language"""
-        # Update exercise type mappings
-        self.exercise_display_map = {
-            "overhead_press": T.get("overhead_press"),
-            "bicep_curl": T.get("bicep_curl"),
-            "squat": T.get("squat"),
-            "pushup": T.get("pushup"),
-            "situp": T.get("situp"),
-            "lateral_raise": T.get("lateral_raise"),
-            "leg_raise": T.get("leg_raise"),
-            "knee_raise": T.get("knee_raise"),
-            "knee_press": T.get("knee_press")
-        }
+        # Reload exercise type mappings from JSON file (with updated translations)
+        self.exercise_display_map = self.load_exercise_display_map()
         
         # Update model type mappings
         self.model_display_map = {

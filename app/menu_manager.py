@@ -73,18 +73,6 @@ class MenuManager:
         self.main_window.english_action.setChecked(T.current_language == "en")
         self.main_window.english_action.triggered.connect(lambda: self.main_window.change_language("en"))
         language_menu.addAction(self.main_window.english_action)
-
-        # 西班牙语选项
-        self.main_window.spanish_action = QAction(T.get("spanish"), self.main_window, checkable=True)
-        self.main_window.spanish_action.setChecked(T.current_language == "es")
-        self.main_window.spanish_action.triggered.connect(lambda: self.main_window.change_language("es"))
-        language_menu.addAction(self.main_window.spanish_action)
-
-        # 印地语选项
-        self.main_window.hindi_action = QAction(T.get("hindi"), self.main_window, checkable=True)
-        self.main_window.hindi_action.setChecked(T.current_language == "hi")
-        self.main_window.hindi_action.triggered.connect(lambda: self.main_window.change_language("hi"))
-        language_menu.addAction(self.main_window.hindi_action)
         
         # 帮助菜单
         help_menu = menubar.addMenu(T.get("help_menu"))
@@ -106,8 +94,6 @@ class MenuManager:
             # 更新菜单项选择状态
             self.main_window.chinese_action.setChecked(language == "zh")
             self.main_window.english_action.setChecked(language == "en")
-            self.main_window.spanish_action.setChecked(language == "es")
-            self.main_window.hindi_action.setChecked(language == "hi")
             
             # 更新窗口标题
             self.main_window.setWindowTitle(T.get("app_title"))
