@@ -20,7 +20,8 @@
 
 - **2025-06-07**: Major update! Dropped YOLO models and all GPU support. Now uses only RTMPose for pose detection, and runs on CPU only. Simpler, more compatible, and easier to use.
 - **2025-06-12**：Optimize exercise_counters.py for counting accuracy, code structure optimization
-- **2025-11-15**: Reverted asynchronous pose detection due to accuracy issues, restored synchronous pose detection. Fixed crash when switching from statistics mode back to detection mode.
+- **2025-11-14**: Reverted asynchronous pose detection due to accuracy issues, restored synchronous pose detection. Fixed crash when switching from statistics mode back to detection mode.
+- **2025-11-15**: New exercise database feature! All exercise configurations are now managed in `data/exercises.json` file. You can easily add, modify, or remove exercise types without modifying code.
 
 ## 🔮 Future Development
 
@@ -70,6 +71,45 @@
 - Use manual adjustment buttons to correct the count if needed
 - Toggle skeleton visualization on/off
 - View your workout statistics over time
+
+### 🎯 Custom Exercise Types
+
+All exercise types are now stored in the `data/exercises.json` file. You can easily add, modify, or remove exercise types without modifying code!
+
+#### How to Add a New Exercise Type
+
+1. **Keypoint Index Reference**
+   - The system uses COCO 17 keypoint format:
+     - `0`: nose, `1`: left_eye, `2`: right_eye, `3`: left_ear, `4`: right_ear
+     - `5`: left_shoulder, `6`: right_shoulder, `7`: left_elbow, `8`: right_elbow
+     - `9`: left_wrist, `10`: right_wrist, `11`: left_hip, `12`: right_hip
+     - `13`: left_knee, `14`: right_knee, `15`: left_ankle, `16`: right_ankle
+
+2. **Configuration Parameters**
+   - `down_angle`: Angle threshold when lowering (degrees)
+   - `up_angle`: Angle threshold when raising (degrees)
+   - `keypoints.left`: Left side three keypoint indices [pt1, pt2, pt3] for angle calculation
+   - `keypoints.right`: Right side three keypoint indices [pt1, pt2, pt3] for angle calculation
+   - `is_leg_exercise`: Whether it's a leg exercise (true/false), affects counting logic
+   - `angle_point`: Keypoint indices [pt1, pt2, pt3] for displaying angle lines on video
+
+3. **Example: Adding a New Exercise**
+   ```json
+   "my_custom_exercise": {
+     "name_zh": "我的自定义运动",
+     "name_en": "My Custom Exercise",
+     "down_angle": 120,
+     "up_angle": 170,
+     "keypoints": {
+       "left": [5, 7, 9],
+       "right": [6, 8, 10]
+     },
+     "is_leg_exercise": false,
+     "angle_point": [6, 8, 10]
+   }
+   ```
+
+4. **Restart the Application**
 
 
 ## 📋 Requirements

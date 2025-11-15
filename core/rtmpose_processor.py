@@ -2,6 +2,7 @@ import os
 import cv2
 import sys
 import numpy as np
+import json
 from rtmlib import Wholebody, draw_skeleton
 
 class RTMPoseProcessor:
@@ -18,6 +19,9 @@ class RTMPoseProcessor:
         self.init_rtmpose(mode)
         
         self.keypoint_mapping = self.get_keypoint_mapping()
+        
+        # Load exercise configurations for angle points
+        self.exercise_configs = self.load_exercise_configs()
     
     def get_models_dir(self):
         """Get model file directory, compatible with development and packaged environments"""
@@ -88,6 +92,44 @@ class RTMPoseProcessor:
         # 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
         return list(range(17))  # 1:1 mapping
     
+    def get_exercises_file_path(self):
+        """Get exercises.json file path, compatible with development and packaged environments"""
+        if getattr(sys, 'frozen', False):
+            # Packaged environment, data files are in temp directory
+            base_path = sys._MEIPASS
+            exercises_file = os.path.join(base_path, 'data', 'exercises.json')
+        else:
+            # Development environment, data files are in project directory
+            exercises_file = os.path.join('data', 'exercises.json')
+        
+        return exercises_file
+    
+    def load_exercise_configs(self):
+        """Load exercise configurations from JSON file"""
+        exercises_file = self.get_exercises_file_path()
+        
+        try:
+            if os.path.exists(exercises_file):
+                with open(exercises_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    exercises = data.get('exercises', {})
+                    
+                    # Extract angle_point for each exercise
+                    configs = {}
+                    for exercise_type, config in exercises.items():
+                        configs[exercise_type] = {
+                            'angle_point': config.get('angle_point', [])
+                        }
+                    
+                    return configs
+            else:
+                print(f"ERROR: Exercises file not found at {exercises_file}")
+                print("Please ensure data/exercises.json exists")
+                return {}
+        except Exception as e:
+            print(f"ERROR loading exercises from JSON: {e}")
+            return {}
+    
     def update_model(self, mode='balanced'):
         """Update model"""
         print(f"Updating RTMPose model to mode: {mode}")
@@ -138,8 +180,8 @@ class RTMPoseProcessor:
         except Exception as e:
             print(f"RTMPose processing failed: {e}")
         
-        # Return None for processed frame since we don't need it
-        return None, current_angle, keypoints
+        # Return None for processed frame, current_angle, angle_point, and keypoints
+        return None, current_angle, angle_point, keypoints
     
     def get_exercise_angle(self, keypoints, exercise_type):
         """Get angle based on exercise type"""
@@ -147,42 +189,34 @@ class RTMPoseProcessor:
         angle_point = None
         
         try:
-            if exercise_type == "squat":
-                current_angle = self.exercise_counter.count_squat(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[12], keypoints[14], keypoints[16]]
-            elif exercise_type == "pushup":
-                current_angle = self.exercise_counter.count_pushup(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[6], keypoints[8], keypoints[10]]
-            elif exercise_type == "situp":
-                current_angle = self.exercise_counter.count_situp(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[5], keypoints[11], keypoints[12]]
-            elif exercise_type == "bicep_curl":
-                current_angle = self.exercise_counter.count_bicep_curl(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[6], keypoints[8], keypoints[10]]
-            elif exercise_type == "lateral_raise":
-                current_angle = self.exercise_counter.count_lateral_raise(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[12], keypoints[6], keypoints[8]]
-            elif exercise_type == "overhead_press":
-                current_angle = self.exercise_counter.count_overhead_press(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[12], keypoints[6], keypoints[8]]
-            elif exercise_type == "leg_raise":
-                current_angle = self.exercise_counter.count_leg_raise(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[12], keypoints[14], keypoints[16]]
-            elif exercise_type == "knee_raise":
-                current_angle = self.exercise_counter.count_knee_raise(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[12], keypoints[14], keypoints[16]]
-            elif exercise_type == "knee_press":
-                current_angle = self.exercise_counter.count_knee_press(keypoints)
-                if current_angle is not None:
-                    angle_point = [keypoints[11], keypoints[13], keypoints[15]]
+            # Get the counting method based on exercise type
+            count_method_map = {
+                "squat": self.exercise_counter.count_squat,
+                "pushup": self.exercise_counter.count_pushup,
+                "situp": self.exercise_counter.count_situp,
+                "bicep_curl": self.exercise_counter.count_bicep_curl,
+                "lateral_raise": self.exercise_counter.count_lateral_raise,
+                "overhead_press": self.exercise_counter.count_overhead_press,
+                "leg_raise": self.exercise_counter.count_leg_raise,
+                "knee_raise": self.exercise_counter.count_knee_raise,
+                "knee_press": self.exercise_counter.count_knee_press,
+                "crunch": self.exercise_counter.count_crunch
+            }
+            
+            # Get counting method
+            count_method = count_method_map.get(exercise_type)
+            if count_method:
+                current_angle = count_method(keypoints)
+                
+                # Get angle_point from config
+                if current_angle is not None and exercise_type in self.exercise_configs:
+                    angle_point_indices = self.exercise_configs[exercise_type].get('angle_point', [])
+                    if len(angle_point_indices) == 3:
+                        angle_point = [
+                            keypoints[angle_point_indices[0]],
+                            keypoints[angle_point_indices[1]],
+                            keypoints[angle_point_indices[2]]
+                        ]
         except Exception as e:
             print(f"Error calculating exercise angle: {e}")
             

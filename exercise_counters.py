@@ -1,6 +1,9 @@
 import numpy as np
 from collections import deque
 import time
+import json
+import os
+import sys
 
 class ExerciseCounter:
     """Basic exercise counter with angle-based detection"""
@@ -19,86 +22,54 @@ class ExerciseCounter:
         # Exercise configurations
         self.exercise_configs = self.get_exercise_configs()
         
-        # Independent counting for leg exercises
-        self.leg_exercises = ['leg_raise', 'knee_raise', 'knee_press']
+        # Independent counting for leg exercises - load from config
+        self.leg_exercises = [
+            exercise_type for exercise_type, config in self.exercise_configs.items()
+            if config.get('is_leg_exercise', False)
+        ]
         self.leg_stages = {'left': None, 'right': None}  # Track each leg's stage
     
+    def get_exercises_file_path(self):
+        """Get exercises.json file path, compatible with development and packaged environments"""
+        if getattr(sys, 'frozen', False):
+            # Packaged environment, data files are in temp directory
+            base_path = sys._MEIPASS
+            exercises_file = os.path.join(base_path, 'data', 'exercises.json')
+        else:
+            # Development environment, data files are in project directory
+            exercises_file = os.path.join('data', 'exercises.json')
+        
+        return exercises_file
+    
     def get_exercise_configs(self):
-        """Exercise-specific angle thresholds"""
-        return {
-            'squat': {
-                'down_angle': 110,
-                'up_angle': 160,
-                'keypoints': {
-                    'left': [11, 13, 15],  # hip, knee, ankle
-                    'right': [12, 14, 16]  # hip, knee, ankle
-                }
-            },
-            'pushup': {
-                'down_angle': 110,
-                'up_angle': 160,
-                'keypoints': {
-                    'left': [5, 7, 9],    # shoulder, elbow, wrist
-                    'right': [6, 8, 10]   # shoulder, elbow, wrist
-                }
-            },
-            'situp': {
-                'down_angle': 145,
-                'up_angle': 170,
-                'keypoints': {
-                    'left': [5, 11, 15],  # shoulder, hip, ankle
-                    'right': [6, 12, 16]  # shoulder, hip, ankle
-                }
-            },
-            'bicep_curl': {
-                'down_angle': 160,
-                'up_angle': 60,
-                'keypoints': {
-                    'left': [5, 7, 9],    # shoulder, elbow, wrist
-                    'right': [6, 8, 10]   # shoulder, elbow, wrist
-                }
-            },
-            'lateral_raise': {
-                'down_angle': 30,
-                'up_angle': 80,
-                'keypoints': {
-                    'left': [11, 5, 7],    # hip, shoulder, elbow
-                    'right': [12, 6, 8]   # hip, shoulder, elbow
-                }
-            },
-            'overhead_press': {
-                'down_angle': 30,
-                'up_angle': 150,
-                'keypoints': {
-                    'left': [11, 5, 7],    # hip, shoulder, elbow
-                    'right': [12, 6, 8]   # hip, shoulder, elbow
-                }
-            },
-            'leg_raise': {
-                'down_angle': 130,
-                'up_angle': 160,
-                'keypoints': {
-                    'left': [5, 11, 13],  # shoulder, hip, knee
-                    'right': [6, 12, 14]  # shoulder, hip, knee
-                }
-            },
-            'knee_raise': {
-                'down_angle': 110,
-                'up_angle': 160,
-                'keypoints': {
-                    'left': [11, 13, 15],  # hip, knee, ankle
-                    'right': [12, 14, 16]  # hip, knee, ankle
-                }
-            },
-            'knee_press': {
-                'down_angle': 110,
-                'up_angle': 160,
-                'keypoints': {
-                    'left': [11, 13, 15],  # hip, knee, ankle
-                    'right': [12, 14, 16]  # hip, knee, ankle
-                }
-            }
-        }
+        """Load exercise-specific angle thresholds from JSON file"""
+        exercises_file = self.get_exercises_file_path()
+        
+        try:
+            if os.path.exists(exercises_file):
+                with open(exercises_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    exercises = data.get('exercises', {})
+                    
+                    # Convert to the format expected by the rest of the code
+                    configs = {}
+                    for exercise_type, config in exercises.items():
+                        configs[exercise_type] = {
+                            'down_angle': config.get('down_angle'),
+                            'up_angle': config.get('up_angle'),
+                            'keypoints': config.get('keypoints', {}),
+                            'is_leg_exercise': config.get('is_leg_exercise', False)
+                        }
+                    
+                    print(f"Loaded {len(configs)} exercises from {exercises_file}")
+                    return configs
+            else:
+                print(f"ERROR: Exercises file not found at {exercises_file}")
+                print("Please ensure data/exercises.json exists")
+                return {}
+        except Exception as e:
+            print(f"ERROR loading exercises from JSON: {e}")
+            return {}
     
     def reset_counter(self):
         """Reset counter to initial state"""
@@ -289,3 +260,7 @@ class ExerciseCounter:
     def count_knee_press(self, keypoints):
         """Count knee press repetitions"""
         return self.count_exercise(keypoints, 'knee_press')
+    
+    def count_crunch(self, keypoints):
+        """Count crunch repetitions"""
+        return self.count_exercise(keypoints, 'crunch')

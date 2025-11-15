@@ -23,20 +23,20 @@ class VideoProcessor:
             # 使用推理帧进行姿态检测（如果可用）
             inference_frame = getattr(self.main_window, 'current_inference_frame', frame)
             
-            # 姿态处理器处理推理帧，只获取关键点信息
-            _, current_angle, keypoints = self.main_window.pose_processor.process_frame(
+            # 姿态处理器处理推理帧，获取关键点信息和角度点
+            _, current_angle, angle_point, keypoints = self.main_window.pose_processor.process_frame(
                 inference_frame, self.main_window.exercise_type
             )
             
             # 准备高分辨率显示帧
             display_frame = frame.copy()
             
+            # 计算缩放比例（推理帧到显示帧）
+            scale_x = display_frame.shape[1] / inference_frame.shape[1]
+            scale_y = display_frame.shape[0] / inference_frame.shape[0]
+            
             # 如果有关键点信息，在高分辨率帧上绘制骨架
             if keypoints is not None and self.main_window.pose_processor.show_skeleton:
-                # 计算缩放比例（推理帧到显示帧）
-                scale_x = display_frame.shape[1] / inference_frame.shape[1]
-                scale_y = display_frame.shape[0] / inference_frame.shape[0]
-                
                 # 将关键点坐标缩放到显示帧尺寸
                 scaled_keypoints = keypoints.copy()
                 scaled_keypoints[:, 0] *= scale_x
@@ -45,9 +45,33 @@ class VideoProcessor:
                 # 在高分辨率帧上绘制骨架
                 display_frame = self.draw_skeleton_on_frame(display_frame, scaled_keypoints)
             
-            # 如果启用镜像模式，应用镜像处理
+            # 先缩放角度点坐标（基于推理帧尺寸）
+            if angle_point is not None and len(angle_point) == 3:
+                # 先缩放到显示帧尺寸
+                scaled_angle_point = [
+                    [int(angle_point[0][0] * scale_x), int(angle_point[0][1] * scale_y)],
+                    [int(angle_point[1][0] * scale_x), int(angle_point[1][1] * scale_y)],
+                    [int(angle_point[2][0] * scale_x), int(angle_point[2][1] * scale_y)]
+                ]
+            else:
+                scaled_angle_point = None
+            
+            # 如果启用镜像模式，先应用镜像处理
             if self.main_window.mirror_mode:
                 display_frame = cv2.flip(display_frame, 1)
+                # 镜像后需要调整角度点坐标（因为显示帧被镜像了）
+                if scaled_angle_point is not None:
+                    frame_width = display_frame.shape[1]
+                    # 镜像 x 坐标：frame_width - x
+                    scaled_angle_point = [
+                        [int(frame_width - scaled_angle_point[0][0]), scaled_angle_point[0][1]],
+                        [int(frame_width - scaled_angle_point[1][0]), scaled_angle_point[1][1]],
+                        [int(frame_width - scaled_angle_point[2][0]), scaled_angle_point[2][1]]
+                    ]
+            
+            # 在镜像后绘制角度线（这样角度线位置就正确了）
+            if scaled_angle_point is not None:
+                display_frame = self.draw_angle_lines(display_frame, scaled_angle_point, current_angle)
             
             # 转换BGR到RGB（Qt需要RGB格式）
             display_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
@@ -143,6 +167,63 @@ class VideoProcessor:
             print(f"Error drawing skeleton: {e}")
             return frame
     
+    def draw_angle_lines(self, frame, angle_point, angle_value):
+        """在帧上绘制角度线和角度值"""
+        try:
+            if angle_point is None or len(angle_point) != 3:
+                return frame
+            
+            pt1, pt2, pt3 = angle_point
+            
+            # 检查点是否有效（不是 (0, 0) 且在帧范围内）
+            frame_height, frame_width = frame.shape[:2]
+            if (pt1[0] == 0 and pt1[1] == 0) or (pt2[0] == 0 and pt2[1] == 0) or (pt3[0] == 0 and pt3[1] == 0):
+                return frame
+            
+            # 检查坐标是否在有效范围内（防止坐标超出帧范围导致绘制到错误位置）
+            if (pt1[0] < 0 or pt1[0] >= frame_width or pt1[1] < 0 or pt1[1] >= frame_height or
+                pt2[0] < 0 or pt2[0] >= frame_width or pt2[1] < 0 or pt2[1] >= frame_height or
+                pt3[0] < 0 or pt3[0] >= frame_width or pt3[1] < 0 or pt3[1] >= frame_height):
+                # 坐标超出范围，不绘制
+                return frame
+            
+            # 定义角度线颜色（黄色，BGR格式）
+            angle_color = (0, 255, 255)  # Yellow
+            
+            # 根据分辨率调整线条粗细
+            line_thickness = max(2, int(frame.shape[1] / 640 * 2))
+            
+            # 绘制两条角度线：pt1-pt2 和 pt2-pt3
+            cv2.line(frame, (pt1[0], pt1[1]), (pt2[0], pt2[1]), angle_color, line_thickness)
+            cv2.line(frame, (pt2[0], pt2[1]), (pt3[0], pt3[1]), angle_color, line_thickness)
+            
+            # 在中间点（pt2）绘制一个小圆圈
+            circle_radius = max(4, int(frame.shape[1] / 640 * 6))
+            cv2.circle(frame, (pt2[0], pt2[1]), circle_radius, angle_color, -1)
+            
+            # 在角度点附近显示角度值（如果角度值有效）
+            if angle_value is not None:
+                # 计算文本位置（在中间点上方）
+                text_x = pt2[0]
+                text_y = pt2[1] - 20
+                
+                # 确保文本位置在帧内
+                if text_y < 20:
+                    text_y = pt2[1] + 30
+                
+                # 绘制角度值文本（使用数字和deg避免特殊字符显示问题）
+                font_scale = max(0.5, frame.shape[1] / 640 * 0.6)
+                # 使用 "deg" 代替度符号，避免显示问题
+                text = f"{int(angle_value)} deg"
+                cv2.putText(frame, text, (text_x, text_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, font_scale, angle_color, 2)
+            
+            return frame
+            
+        except Exception as e:
+            print(f"Error drawing angle lines: {e}")
+            return frame
+    
     def update_ui_components(self, current_angle, keypoints):
         """更新UI组件显示"""
         try:
@@ -207,6 +288,9 @@ class VideoProcessor:
     def toggle_mirror(self, mirror):
         """切换镜像模式"""
         self.main_window.mirror_mode = mirror
+        # 同步更新 video_thread 的镜像设置
+        if hasattr(self.main_window, 'video_thread'):
+            self.main_window.video_thread.set_mirror(mirror)
         self.main_window.statusBar.showMessage(f"Mirror mode: {'ON' if mirror else 'OFF'}")
         
         # 更新菜单动作状态
