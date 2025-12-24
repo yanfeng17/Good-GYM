@@ -95,7 +95,13 @@ class RTMPoseProcessor:
     def get_exercises_file_path(self):
         """Get exercises.json file path, compatible with development and packaged environments"""
         if getattr(sys, 'frozen', False):
-            # Packaged environment, data files are in temp directory
+            # Packaged environment
+            # First check for external data folder next to exe (user editable)
+            exe_dir = os.path.dirname(sys.executable)
+            external_file = os.path.join(exe_dir, 'data', 'exercises.json')
+            if os.path.exists(external_file):
+                return external_file
+            # Fall back to bundled data inside exe
             base_path = sys._MEIPASS
             exercises_file = os.path.join(base_path, 'data', 'exercises.json')
         else:

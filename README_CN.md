@@ -63,9 +63,9 @@
 
   **Windows EXE打包版本**：
 
-  [百度网盘链接]( https://pan.baidu.com/s/1pXtzy5SfFp1g4JJx-kCLCQ ) 提取码: 8866
+  [百度网盘链接]( https://pan.baidu.com/s/1xzZjwUmnXLaWatqPcSE1zw ) 提取码: 8866
 
-  [Google Drive](https://drive.google.com/file/d/14CW8kBBc3NolH-59b3wHoZY1dFvKnv2P/view?usp=sharing)
+  [Google Drive](https://drive.google.com/file/d/1VKDecEDLdnyi59ZmHhOvUPwAxxkw9wlH/view?usp=drive_link)
 
 ## 📝 使用指南
 

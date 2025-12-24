@@ -57,9 +57,9 @@
 
   **Windows EXE package**: 
 
-  [Baidu Netdisk Link](https://pan.baidu.com/s/1pXtzy5SfFp1g4JJx-kCLCQ) code: 8866
+  [Baidu Netdisk Link](https://pan.baidu.com/s/1xzZjwUmnXLaWatqPcSE1zw) code: 8866
 
-  [Google Drive](https://drive.google.com/file/d/14CW8kBBc3NolH-59b3wHoZY1dFvKnv2P/view?usp=sharing)
+  [Google Drive](https://drive.google.com/file/d/1VKDecEDLdnyi59ZmHhOvUPwAxxkw9wlH/view?usp=drive_link)
 
 ## 📝 Usage Guide
 
