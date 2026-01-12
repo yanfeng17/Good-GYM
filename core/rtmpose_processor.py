@@ -30,7 +30,13 @@ class RTMPoseProcessor:
             base_path = sys._MEIPASS
             models_dir = os.path.join(base_path, 'models')
         else:
-            # Development environment, model files are in project directory
+            # Development or Docker environment
+            # First try Docker container absolute path
+            docker_path = '/app/models'
+            if os.path.exists(docker_path):
+                print(f"[RTMPose] Using Docker models path: {docker_path}")
+                return docker_path
+            # Fall back to relative path for local development
             models_dir = './models'
         
         return models_dir
@@ -105,7 +111,13 @@ class RTMPoseProcessor:
             base_path = sys._MEIPASS
             exercises_file = os.path.join(base_path, 'data', 'exercises.json')
         else:
-            # Development environment, data files are in project directory
+            # Development or Docker environment
+            # First try Docker container absolute path
+            docker_path = '/app/data/exercises.json'
+            if os.path.exists(docker_path):
+                print(f"[RTMPose] Using Docker data path: {docker_path}")
+                return docker_path
+            # Fall back to relative path for local development
             exercises_file = os.path.join('data', 'exercises.json')
         
         return exercises_file

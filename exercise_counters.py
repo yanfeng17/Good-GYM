@@ -31,30 +31,50 @@ class ExerciseCounter:
     
     def get_exercises_file_path(self):
         """Get exercises.json file path, compatible with development and packaged environments"""
+        import os
+        
+        # Debug: Print current working directory
+        cwd = os.getcwd()
+        print(f"[ExerciseCounter] 当前工作目录: {cwd}")
+        print(f"[ExerciseCounter] sys.frozen = {getattr(sys, 'frozen', False)}")
+        
         if getattr(sys, 'frozen', False):
             # Packaged environment
-            # First check for external data folder next to exe (user editable)
             exe_dir = os.path.dirname(sys.executable)
             external_file = os.path.join(exe_dir, 'data', 'exercises.json')
             if os.path.exists(external_file):
                 return external_file
-            # Fall back to bundled data inside exe
             base_path = sys._MEIPASS
             exercises_file = os.path.join(base_path, 'data', 'exercises.json')
         else:
-            # Development environment, data files are in project directory
+            # Development or Docker environment
+            # First try absolute path for Docker container
+            docker_path = '/app/data/exercises.json'
+            print(f"[ExerciseCounter] 检查Docker路径: {docker_path}, 存在={os.path.exists(docker_path)}")
+            
+            if os.path.exists(docker_path):
+                print(f"[ExerciseCounter] ✓ 使用Docker路径: {docker_path}")
+                return docker_path
+            
+            # Fall back to relative path for local development
             exercises_file = os.path.join('data', 'exercises.json')
+            print(f"[ExerciseCounter] 检查相对路径: {exercises_file}, 存在={os.path.exists(exercises_file)}")
         
+        print(f"[ExerciseCounter] 最终使用路径: {exercises_file}")
         return exercises_file
     
     def get_exercise_configs(self):
         """Load exercise-specific angle thresholds from JSON file"""
+        print("[ExerciseCounter] ========== 开始加载运动配置 ==========")
         exercises_file = self.get_exercises_file_path()
         
         try:
+            print(f"[ExerciseCounter] 尝试打开文件: {exercises_file}")
             if os.path.exists(exercises_file):
                 with open(exercises_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                    content = f.read()
+                    print(f"[ExerciseCounter] 文件内容长度: {len(content)} 字符")
+                    data = json.loads(content)
                     exercises = data.get('exercises', {})
                     
                     # Convert to the format expected by the rest of the code
@@ -67,14 +87,22 @@ class ExerciseCounter:
                             'is_leg_exercise': config.get('is_leg_exercise', False)
                         }
                     
-                    print(f"Loaded {len(configs)} exercises from {exercises_file}")
+                    print(f"[ExerciseCounter] ✓ 成功加载 {len(configs)} 个运动类型: {list(configs.keys())}")
+                    print("[ExerciseCounter] ========== 运动配置加载完成 ==========")
                     return configs
             else:
-                print(f"ERROR: Exercises file not found at {exercises_file}")
-                print("Please ensure data/exercises.json exists")
+                print(f"[ExerciseCounter] ✗ 错误: 文件不存在 {exercises_file}")
+                # List directory contents for debugging
+                parent_dir = os.path.dirname(exercises_file) or '.'
+                if os.path.exists(parent_dir):
+                    print(f"[ExerciseCounter] 目录 {parent_dir} 内容: {os.listdir(parent_dir)}")
+                else:
+                    print(f"[ExerciseCounter] 目录 {parent_dir} 不存在")
                 return {}
         except Exception as e:
-            print(f"ERROR loading exercises from JSON: {e}")
+            print(f"[ExerciseCounter] ✗ 加载异常: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
     
     def reset_counter(self):
@@ -187,6 +215,8 @@ class ExerciseCounter:
             
             # Counting logic with timing check
             if smoothed_angle > up_threshold:
+                if self.stage != "up":
+                    print(f"[计数器] {exercise_type} 阶段变为UP, 角度={smoothed_angle:.1f}°")
                 self.stage = "up"
             elif (smoothed_angle < down_threshold and 
                   self.stage == "up" and 
@@ -195,6 +225,7 @@ class ExerciseCounter:
                 self.stage = "down"
                 self.counter += 1
                 self.last_count_time = time.time()
+                print(f"[计数器] ✓ {exercise_type} 计数+1，当前={self.counter}, 角度={smoothed_angle:.1f}°")
                 
             return smoothed_angle
             

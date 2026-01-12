@@ -6,11 +6,11 @@
       "down_angle": 110,
       "up_angle": 160,
       "keypoints": {
-        "left": [11, 13, 15],
-        "right": [12, 14, 16]
+        "left": [23, 25, 27],
+        "right": [24, 26, 28]
       },
       "is_leg_exercise": false,
-      "angle_point": [12, 14, 16]
+      "angle_point": [24, 26, 28]
     },
     "pushup": {
       "name_zh": "俯卧撑",
@@ -18,11 +18,11 @@
       "down_angle": 110,
       "up_angle": 160,
       "keypoints": {
-        "left": [5, 7, 9],
-        "right": [6, 8, 10]
+        "left": [11, 13, 15],
+        "right": [12, 14, 16]
       },
       "is_leg_exercise": false,
-      "angle_point": [6, 8, 10]
+      "angle_point": [12, 14, 16]
     },
     "situp": {
       "name_zh": "仰卧起坐",
@@ -30,11 +30,11 @@
       "down_angle": 145,
       "up_angle": 170,
       "keypoints": {
-        "left": [5, 11, 15],
-        "right": [6, 12, 16]
+        "left": [11, 23, 27],
+        "right": [12, 24, 28]
       },
       "is_leg_exercise": false,
-      "angle_point": [5, 11, 12]
+      "angle_point": [11, 23, 24]
     },
     "bicep_curl": {
       "name_zh": "弯举",
@@ -42,11 +42,11 @@
       "down_angle": 160,
       "up_angle": 60,
       "keypoints": {
-        "left": [5, 7, 9],
-        "right": [6, 8, 10]
+        "left": [11, 13, 15],
+        "right": [12, 14, 16]
       },
       "is_leg_exercise": false,
-      "angle_point": [6, 8, 10]
+      "angle_point": [12, 14, 16]
     },
     "lateral_raise": {
       "name_zh": "侧平举",
@@ -54,11 +54,11 @@
       "down_angle": 30,
       "up_angle": 80,
       "keypoints": {
-        "left": [11, 5, 7],
-        "right": [12, 6, 8]
+        "left": [23, 11, 13],
+        "right": [24, 12, 14]
       },
       "is_leg_exercise": false,
-      "angle_point": [12, 6, 8]
+      "angle_point": [24, 12, 14]
     },
     "overhead_press": {
       "name_zh": "推举",
@@ -66,11 +66,11 @@
       "down_angle": 30,
       "up_angle": 150,
       "keypoints": {
-        "left": [11, 5, 7],
-        "right": [12, 6, 8]
+        "left": [23, 11, 13],
+        "right": [24, 12, 14]
       },
       "is_leg_exercise": false,
-      "angle_point": [12, 6, 8]
+      "angle_point": [24, 12, 14]
     },
     "leg_raise": {
       "name_zh": "抬腿",
@@ -78,11 +78,11 @@
       "down_angle": 130,
       "up_angle": 160,
       "keypoints": {
-        "left": [5, 11, 13],
-        "right": [6, 12, 14]
+        "left": [11, 23, 25],
+        "right": [12, 24, 26]
       },
       "is_leg_exercise": true,
-      "angle_point": [12, 14, 16]
+      "angle_point": [24, 26, 28]
     },
     "knee_raise": {
       "name_zh": "抬膝",
@@ -90,11 +90,11 @@
       "down_angle": 110,
       "up_angle": 160,
       "keypoints": {
-        "left": [11, 13, 15],
-        "right": [12, 14, 16]
+        "left": [23, 25, 27],
+        "right": [24, 26, 28]
       },
       "is_leg_exercise": true,
-      "angle_point": [12, 14, 16]
+      "angle_point": [24, 26, 28]
     },
     "knee_press": {
       "name_zh": "压膝",
@@ -102,11 +102,11 @@
       "down_angle": 110,
       "up_angle": 160,
       "keypoints": {
-        "left": [11, 13, 15],
-        "right": [12, 14, 16]
+        "left": [23, 25, 27],
+        "right": [24, 26, 28]
       },
       "is_leg_exercise": true,
-      "angle_point": [11, 13, 15]
+      "angle_point": [23, 25, 27]
     },
     "crunch": {
       "name_zh": "卷腹",
@@ -114,12 +114,11 @@
       "down_angle": 150,
       "up_angle": 175,
       "keypoints": {
-        "left": [5, 11, 13],
-        "right": [6, 12, 14]
+        "left": [11, 23, 25],
+        "right": [12, 24, 26]
       },
       "is_leg_exercise": false,
-      "angle_point": [5, 11, 12]
+      "angle_point": [11, 23, 24]
     }
   }
 }
-

@@ -28,8 +28,8 @@ class VideoDisplay(QWidget):
         self.layout.addWidget(self.image_label, 0, Qt.AlignCenter)
         
         # Default settings
-        self.is_portrait = True
-        self.aspect_ratio = 9/16  # Default portrait ratio
+        self.is_portrait = False  # Default landscape mode
+        self.aspect_ratio = 16/9  # Default landscape ratio
         self.set_orientation(self.is_portrait)
     
     def update_image(self, frame):
@@ -49,17 +49,17 @@ class VideoDisplay(QWidget):
             label_height = self.height()
             
             if label_width > 0 and label_height > 0:
-                # 使用高质量缩放，保持长宽比
+                # 使用快速缩放以提升性能
                 qt_img = convert_to_qt_format.scaled(
                     label_width,
                     label_height,
                     Qt.KeepAspectRatio,  # 保持长宽比，避免变形
-                    Qt.SmoothTransformation  # 使用平滑变换获得更好质量
+                    Qt.FastTransformation  # 使用快速变换提升性能
                 )
             else:
                 qt_img = convert_to_qt_format
             
-            # 创建高质量像素图
+            # 创建像素图
             pixmap = QPixmap.fromImage(qt_img)
             
             # 设置高质量渲染

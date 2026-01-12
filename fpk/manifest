@@ -1,0 +1,15 @@
+appname=goodgym
+version=1.0.0
+display_name=Good-GYM AI健身助手
+desc=基于MediaPipe姿态检测的AI健身助手，支持多种运动计数，通过VNC远程访问
+arch=x86_64
+source=thirdparty
+maintainer=Good-GYM Team
+maintainer_url=https://github.com/yo-WASSUP/Good-GYM
+distributor=Good-GYM
+distributor_url=https://github.com/yo-WASSUP/Good-GYM
+os_min_version=0.9.0
+desktop_uidir=ui
+desktop_applaunchname=goodgym.main
+service_port=6080
+checkport=true

@@ -1,0 +1,37 @@
+{
+    "current_source": "rtsp_camera",
+    "sources": {
+        "local_camera": {
+            "type": "camera",
+            "device_id": 0,
+            "name": "本地摄像头"
+        },
+        "rtsp_camera": {
+            "type": "rtsp",
+            "url": "rtsp://admin:ZYF001026@192.168.31.99:554/stream2",
+            "name": "RTSP摄像头"
+        }
+    },
+    "presets": {
+        "ip_webcam": {
+            "name": "IP Webcam (安卓)",
+            "url_template": "http://{ip}:8080/video",
+            "example": "http://192.168.1.100:8080/video"
+        },
+        "droidcam": {
+            "name": "DroidCam",
+            "url_template": "http://{ip}:4747/video",
+            "example": "http://192.168.1.100:4747/video"
+        },
+        "rtsp_hikvision": {
+            "name": "海康威视RTSP",
+            "url_template": "rtsp://{user}:{pass}@{ip}:554/Streaming/Channels/101",
+            "example": "rtsp://admin:password@192.168.1.100:554/Streaming/Channels/101"
+        },
+        "rtsp_dahua": {
+            "name": "大华RTSP",
+            "url_template": "rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=0",
+            "example": "rtsp://admin:password@192.168.1.100:554/cam/realmonitor?channel=1&subtype=0"
+        }
+    }
+}

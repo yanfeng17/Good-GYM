@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  good-gym:
+    build: .
+    container_name: good-gym
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    devices:
+      - /dev/video0:/dev/video0  # Passthrough USB camera
+    environment:
+      - RESOLUTION=1280x800
+    restart: unless-stopped

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Good-GYM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #1a1a2e;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        #vnc-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        #audio-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .audio-disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .audio-connected {
+            background: #27ae60;
+            color: white;
+        }
+
+        .audio-pending {
+            background: #f39c12;
+            color: white;
+        }
+
+
+
+        #debug-panel {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            max-width: 400px;
+            max-height: 150px;
+            overflow-y: auto;
+            border-radius: 8px;
+            z-index: 1000;
+            display: none;
+        }
+
+        #debug-panel.visible {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Audio init overlay removed - auto-initialization enabled -->
+
+
+    <!-- Audio status indicator -->
+    <div id="audio-status" class="audio-disconnected" title="点击重连或启用音频">
+        🔇 音频未连接
+    </div>
+
+    <!-- Debug panel -->
+    <div id="debug-panel"></div>
+
+    <!-- VNC iframe - URL set dynamically -->
+    <iframe id="vnc-frame" allow="fullscreen"></iframe>
+
+    <script>
+        // Set VNC iframe URL to port 6081 (noVNC server)
+        const vncFrame = document.getElementById('vnc-frame');
+        const vncUrl = `${window.location.protocol}//${window.location.hostname}:6081/vnc.html?autoconnect=true&resize=scale`;
+        vncFrame.src = vncUrl;
+        console.log('[Audio] VNC URL:', vncUrl);
+    </script>
+
+    <script>
+        // ============ Configuration ============
+        const WS_PORT = 8765;
+        const AUDIO_HTTP_PORT = 8080;
+        const RECONNECT_INTERVAL = 3000;
+
+        // ============ State ============
+        let audioContext = null;
+        let audioBuffers = {};
+        let wsConnection = null;
+        let audioEnabled = false;
+        let debugVisible = false;
+
+        // Mobile Audio Unlock
+        function unlockAudio() {
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    debugLog('AudioContext resumed (User Gesture)');
+                });
+            }
+            // Play silent buffer to unlock iOS audio
+            const buffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+        }
+
+        // ============ Debug Logging ============
+        const debugPanel = document.getElementById('debug-panel');
+        function debugLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.textContent = `[${time}] ${msg}`;
+            debugPanel.appendChild(line);
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+            console.log(`[Audio] ${msg}`);
+
+            // Keep only last 20 lines
+            while (debugPanel.children.length > 20) {
+                debugPanel.removeChild(debugPanel.firstChild);
+            }
+        }
+
+        // ============ Audio Status Update ============
+        const statusEl = document.getElementById('audio-status');
+        function updateStatus(status, text) {
+            statusEl.className = `audio-${status}`;
+            statusEl.textContent = text;
+        }
+
+        // Toggle debug panel
+        statusEl.onclick = () => {
+            debugVisible = !debugVisible;
+            debugPanel.classList.toggle('visible', debugVisible);
+        };
+
+        // ============ Audio Context & Preload ============
+        async function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                debugLog('AudioContext 创建成功');
+
+                // Immediately resume AudioContext if possible
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    debugLog('AudioContext 已恢复');
+                }
+
+                // Preload audio files (use relative path to avoid port issues)
+                const audioFiles = ['count.mp3', 'succeed.mp3', 'milestone.mp3'];
+                const baseUrl = '/assets';
+
+                for (const file of audioFiles) {
+                    try {
+                        debugLog(`加载音频: ${file}`);
+                        const response = await fetch(`${baseUrl}/${file}`);
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const arrayBuffer = await response.arrayBuffer();
+                        audioBuffers[file] = await audioContext.decodeAudioData(arrayBuffer);
+                        debugLog(`✓ 已加载: ${file}`);
+                    } catch (e) {
+                        debugLog(`✗ 加载失败 ${file}: ${e.message}`);
+                    }
+                }
+
+                audioEnabled = true;
+                debugLog('音频系统就绪');
+                return true;
+            } catch (e) {
+                debugLog(`✗ AudioContext 创建失败: ${e.message}`);
+                return false;
+            }
+        }
+
+        // ============ TTS Speech Synthesis ============
+        let speechSynthesis = window.speechSynthesis;
+        let currentCount = 0;
+        let availableVoices = [];
+        let chineseVoice = null;
+        let isSpeaking = false;
+        let speechQueue = [];
+
+        // Wait for voices to be loaded
+        function waitForVoices() {
+            return new Promise((resolve) => {
+                const voices = speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    debugLog(`✓ 语音库已加载 (${voices.length} 个语音)`);
+                    resolve(voices);
+                } else {
+                    debugLog('等待语音库加载...');
+                    speechSynthesis.onvoiceschanged = () => {
+                        const loadedVoices = speechSynthesis.getVoices();
+                        debugLog(`✓ 语音库已加载 (${loadedVoices.length} 个语音)`);
+                        resolve(loadedVoices);
+                    };
+
+                    // Fallback timeout
+                    setTimeout(() => {
+                        const voices = speechSynthesis.getVoices();
+                        if (voices.length === 0) {
+                            debugLog('⚠ 语音库加载超时,可能不支持 TTS');
+                        }
+                        resolve(voices);
+                    }, 2000);
+                }
+            });
+        }
+
+        // Initialize TTS
+        async function initTTS() {
+            if (!speechSynthesis) {
+                debugLog('⚠ 浏览器不支持语音合成');
+                return false;
+            }
+
+            try {
+                availableVoices = await waitForVoices();
+
+                // Find Chinese voice
+                chineseVoice = availableVoices.find(v =>
+                    v.lang.includes('zh') || v.lang.includes('CN')
+                );
+
+                if (chineseVoice) {
+                    debugLog(`✓ 找到中文语音: ${chineseVoice.name} (${chineseVoice.lang})`);
+                } else {
+                    debugLog('⚠ 未找到中文语音,将使用默认语音');
+                    // List available voices for debugging
+                    if (availableVoices.length > 0) {
+                        debugLog(`可用语音: ${availableVoices.slice(0, 3).map(v => v.lang).join(', ')}`);
+                    }
+                }
+
+                return true;
+            } catch (e) {
+                debugLog(`✗ TTS 初始化失败: ${e.message}`);
+                return false;
+            }
+        }
+
+        // Process speech queue
+        function processSpeechQueue() {
+            if (isSpeaking || speechQueue.length === 0) {
+                return;
+            }
+
+            isSpeaking = true;
+            const text = speechQueue.shift();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-CN';
+            utterance.rate = 1.2;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            if (chineseVoice) {
+                utterance.voice = chineseVoice;
+            }
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                debugLog(`✓ TTS 播报完成: ${text}`);
+                // Process next in queue
+                if (speechQueue.length > 0) {
+                    setTimeout(processSpeechQueue, 100);
+                }
+            };
+
+            utterance.onerror = (e) => {
+                isSpeaking = false;
+                debugLog(`✗ TTS 播报错误: ${e.error}`);
+                // Try next in queue
+                if (speechQueue.length > 0) {
+                    setTimeout(processSpeechQueue, 100);
+                }
+            };
+
+            // Cancel any ongoing speech before starting new one
+            speechSynthesis.cancel();
+            speechSynthesis.speak(utterance);
+            debugLog(`🗣️ TTS 播报: ${text}`);
+        }
+
+        function speakText(text) {
+            if (!speechSynthesis) {
+                debugLog('⚠ 浏览器不支持语音合成');
+                return;
+            }
+
+            // Check if AudioContext is running
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    debugLog('AudioContext 已恢复(TTS)');
+                });
+            }
+
+            // Add to queue
+            speechQueue.push(text);
+
+            // Limit queue size
+            if (speechQueue.length > 3) {
+                speechQueue.shift();
+                debugLog('⚠ 语音队列过长,丢弃旧消息');
+            }
+
+            processSpeechQueue();
+        }
+
+
+        function playSound(soundType, count) {
+            debugLog(`收到播放请求: ${soundType}, count=${count}`);
+
+            // If count is provided, try TTS first
+            if (soundType === 'count' && count !== undefined) {
+                const hasVoices = availableVoices.length > 0 || (window.speechSynthesis && window.speechSynthesis.getVoices().length > 0);
+
+                if (window.speechSynthesis && hasVoices) {
+                    currentCount = count;
+                    speakText(`${count}`);  // Only announce the number
+                    return;
+                }
+                debugLog('⚠ TTS不可用(无语音库)，回退到音频文件');
+                // Fall through to below logic to play count.mp3
+            }
+
+
+            if (soundType === 'milestone' && count !== undefined) {
+                const hasVoices = availableVoices.length > 0 || (window.speechSynthesis && window.speechSynthesis.getVoices().length > 0);
+
+                if (window.speechSynthesis && hasVoices) {
+                    speakText(`${count}`);  // Announce milestone count
+                    return;
+                }
+                debugLog('⚠ TTS不可用，播放里程碑音频文件');
+                // Fall through to play milestone.mp3
+            }
+
+
+            // Fallback to audio file for other sounds
+            if (!audioEnabled || !audioContext) {
+                debugLog(`⚠ 音频未启用，无法播放 ${soundType}`);
+                return;
+            }
+
+            // Map sound type to file
+            const fileMap = {
+                'count': 'count.mp3',
+                'succeed': 'succeed.mp3',
+                'milestone': 'milestone.mp3'
+            };
+
+            const file = fileMap[soundType] || soundType;
+            const buffer = audioBuffers[file];
+
+            if (!buffer) {
+                debugLog(`⚠ 音频缓冲区未找到: ${file}`);
+                return;
+            }
+
+            try {
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+                debugLog(`🔊 播放: ${soundType}`);
+            } catch (e) {
+                debugLog(`✗ 播放失败: ${e.message}`);
+            }
+        }
+
+        // ============ WebSocket Connection ============
+        function connectWebSocket() {
+            const wsUrl = `ws://${window.location.hostname}:${WS_PORT}`;
+            debugLog(`连接 WebSocket: ${wsUrl}`);
+            updateStatus('pending', '🔄 连接中...');
+
+            try {
+                wsConnection = new WebSocket(wsUrl);
+
+                wsConnection.onopen = () => {
+                    debugLog('✓ WebSocket 已连接');
+                    updateStatus('connected', '🔊 音频已连接');
+                };
+
+                wsConnection.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        debugLog(`收到消息: ${data.type}`);
+
+                        if (data.type === 'play_audio') {
+                            playSound(data.sound, data.count);
+                        } else if (data.type === 'connected') {
+                            debugLog(`✓ WebSocket 握手成功: ${data.message}`);
+                        }
+                    } catch (e) {
+                        debugLog(`消息解析错误: ${e.message}`);
+                    }
+                };
+
+                wsConnection.onclose = () => {
+                    debugLog('WebSocket 断开,将重连...');
+                    updateStatus('disconnected', '🔇 音频断开');
+                    wsConnection = null;
+                    setTimeout(connectWebSocket, RECONNECT_INTERVAL);
+                };
+
+                wsConnection.onerror = (e) => {
+                    debugLog(`WebSocket 错误: ${e.type}`);
+                };
+
+            } catch (e) {
+                debugLog(`✗ WebSocket 创建失败: ${e.message}`);
+                setTimeout(connectWebSocket, RECONNECT_INTERVAL);
+            }
+        }
+
+        // ============ Mobile Detection ============
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        // ============ Audio Unlock ============
+        function unlockAudio() {
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    debugLog('AudioContext 已恢复 (用户手势)');
+                });
+            }
+
+            // Play silent buffer to unlock iOS audio
+            if (audioContext) {
+                try {
+                    const buffer = audioContext.createBuffer(1, 1, 22050);
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioContext.destination);
+                    source.start(0);
+                    debugLog('✓ 播放静默缓冲区(解锁音频)');
+                } catch (e) {
+                    debugLog(`⚠ 解锁音频失败: ${e.message}`);
+                }
+            }
+        }
+
+        // ============ Initialization ============
+        async function startApp() {
+            debugLog('==================== 应用启动 ====================');
+            debugLog(`设备类型: ${isMobileDevice() ? '移动设备' : '桌面设备'}`);
+
+            // Auto-connect flow
+            updateStatus('pending', '🔄 初始化中...');
+
+            try {
+                // 1. Try to init AudioContext (might be suspended)
+                await initAudio();
+
+                // 2. Try to init TTS
+                await initTTS();
+
+                // 3. Connect WebSocket immediately
+                connectWebSocket();
+
+                // 4. Try to unlock immediately (works if page loaded via user action)
+                unlockAudio();
+
+            } catch (e) {
+                debugLog(`✗ 自动初始化错误: ${e.message}`);
+            }
+        }
+
+        // ============ Event Listeners ============
+        window.addEventListener('load', startApp);
+
+        // Global interaction handler to unlock audio engine
+        function onInteraction() {
+            unlockAudio();
+            // Optional: remove listeners once fully unlocked, but safe to keep
+        }
+
+        ['click', 'touchstart', 'keydown', 'mousedown'].forEach(event => {
+            document.addEventListener(event, onInteraction, { once: false, passive: false });
+        });
+
+        // Enhanced unlock function
+        function unlockAudio() {
+            // 1. Resume AudioContext
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    debugLog('AudioContext 已恢复 (交互触发)');
+                });
+            } else if (!audioContext) {
+                // Try to init if missing
+                initAudio();
+            }
+
+            // 2. Play silent buffer (Critical for iOS)
+            if (audioContext) {
+                try {
+                    const buffer = audioContext.createBuffer(1, 1, 22050);
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioContext.destination);
+                    source.start(0);
+                } catch (e) { }
+            }
+
+            // 3. Prime TTS (Critical for mobile)
+            if (speechSynthesis && !isSpeaking) {
+                // Speak empty string to unlock TTS engine
+                const u = new SpeechSynthesisUtterance('');
+                u.volume = 0;
+                speechSynthesis.speak(u);
+            }
+        }
+
+        // Status icon click handler (Manual Reconnect)
+        statusEl.onclick = () => {
+            unlockAudio(); // Always try to unlock
+
+            if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
+                connectWebSocket();
+            }
+
+            // Toggle debug only if long press or specific logic? 
+            // For now, keep it simple: click = reconnect + unlock. 
+            // Double click = debug? Let's just make debug explicit via console or a hidden gesture.
+            // keeping toggle for now as requested by user previously, but prioritizing connect
+            debugVisible = !debugVisible;
+            debugPanel.classList.toggle('visible', debugVisible);
+        };
+
+
+
+        debugLog('页面加载完成');
+    </script>
+</body>
+
+</html>

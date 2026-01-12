@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                             QComboBox, QGroupBox)
+                             QComboBox, QGroupBox, QFrame, QLineEdit, QScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 import json
@@ -15,14 +15,15 @@ class ControlPanel(QWidget):
     # Define signals
     exercise_changed = pyqtSignal(str)
     counter_reset = pyqtSignal()
-    camera_changed = pyqtSignal(int)
     rotation_toggled = pyqtSignal(bool)
     skeleton_toggled = pyqtSignal(bool)
     counter_increase = pyqtSignal(int)
     counter_decrease = pyqtSignal(int)
     record_confirmed = pyqtSignal(str)
-    model_changed = pyqtSignal(str)  # Add model switching signal
     mirror_toggled = pyqtSignal(bool)
+    video_source_changed = pyqtSignal(str, str)  # type, url/id
+    model_changed = pyqtSignal(str)  # lite/full/heavy
+    tts_mode_changed = pyqtSignal(str)  # sound/ha
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -59,7 +60,13 @@ class ControlPanel(QWidget):
             base_path = sys._MEIPASS
             exercises_file = os.path.join(base_path, 'data', 'exercises.json')
         else:
-            # Development environment, data files are in project directory
+            # Development or Docker environment
+            # First try absolute path for Docker container
+            docker_path = '/app/data/exercises.json'
+            if os.path.exists(docker_path):
+                print(f"[控制面板] 使用Docker路径: {docker_path}")
+                return docker_path
+            # Fall back to relative path for local development
             exercises_file = os.path.join('data', 'exercises.json')
         
         return exercises_file
@@ -67,6 +74,10 @@ class ControlPanel(QWidget):
     def load_exercise_display_map(self):
         """Load exercise display map from JSON file"""
         exercises_file = self.get_exercises_file_path()
+        
+        # Debug log
+        print(f"[控制面板] 尝试加载运动类型文件: {exercises_file}")
+        print(f"[控制面板] 文件存在: {os.path.exists(exercises_file)}")
         
         try:
             if os.path.exists(exercises_file):
@@ -96,27 +107,55 @@ class ControlPanel(QWidget):
                             exercise_map[exercise_type] = display_name
                     
                     if exercise_map:
-                        print(f"Loaded {len(exercise_map)} exercises from {exercises_file}")
+                        print(f"[控制面板] 成功加载 {len(exercise_map)} 种运动: {list(exercise_map.keys())}")
                         return exercise_map
                     else:
-                        print(f"WARNING: No exercises found in {exercises_file}")
-                        return {}
+                        print(f"WARNING: No exercises found in {exercises_file}, using defaults")
+                        return self._get_default_exercises()
             else:
                 print(f"ERROR: Exercises file not found at {exercises_file}")
-                print("Please ensure data/exercises.json exists")
-                return {}
+                print("Using default exercises instead")
+                return self._get_default_exercises()
         except Exception as e:
             print(f"ERROR loading exercises from JSON: {e}")
-            return {}
+            import traceback
+            traceback.print_exc()
+            print("Using default exercises instead")
+            return self._get_default_exercises()
+    
+    def _get_default_exercises(self):
+        """Return default exercise types when JSON loading fails - matches exercises.json"""
+        return {
+            "squat": "深蹲",
+            "pushup": "俯卧撑",
+            "situp": "仰卧起坐",
+            "bicep_curl": "弯举",
+            "lateral_raise": "侧平举",
+            "overhead_press": "推举",
+            "leg_raise": "抬腿",
+            "knee_raise": "抬膝",
+            "knee_press": "压膝",
+            "crunch": "卷腹"
+        }
     
     def setup_ui(self):
         """Setup control panel UI"""
+        # Create Scroll Area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        
+        # Create content widget to hold everything
+        content_widget = QWidget()
+        self.content_layout = QVBoxLayout(content_widget)
+        self.content_layout.setSpacing(15)  # Add some spacing between groups
+        
         # Application title
         self.title_label = QLabel(T.get("app_title"))
         self.title_label.setFont(QFont("Arial", 20, QFont.Bold))
         self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setStyleSheet("font-size: 25pt; font-weight: bold; color: #2c3e50; margin-bottom: 15px;")
-        self.layout.addWidget(self.title_label)
+        self.title_label.setStyleSheet("font-size: 25pt; font-weight: bold; color: #2c3e50; margin-bottom: 5px;")
+        self.content_layout.addWidget(self.title_label)
         
         # Add info group
         self.setup_info_group()
@@ -127,8 +166,14 @@ class ControlPanel(QWidget):
         # Add phase display group
         self.setup_phase_group()
         
-        # Add stretch space
-        self.layout.addStretch()
+        # Add stretch at the bottom
+        self.content_layout.addStretch()
+        
+        # Set content widget to scroll area
+        scroll.setWidget(content_widget)
+        
+        # Add scroll area to main layout
+        self.layout.addWidget(scroll)
     
     def setup_info_group(self):
         """Setup exercise info group"""
@@ -171,21 +216,22 @@ class ControlPanel(QWidget):
         # angle_layout.addWidget(self.angle_value, 1, Qt.AlignCenter)
         # info_layout.addLayout(angle_layout)
         
-        self.layout.addWidget(self.info_group)
+        self.content_layout.addWidget(self.info_group)
     
     def setup_controls_group(self):
         """Setup control options group"""
         self.controls_group = QGroupBox(T.get("control_options"))
         self.controls_group.setStyleSheet(AppStyles.get_group_box_style())
         controls_layout = QVBoxLayout(self.controls_group)
-        controls_layout.setSpacing(12)  # Increase overall layout spacing
+        controls_layout.setSpacing(8)  # Reduce overall layout spacing
+        controls_layout.setContentsMargins(8, 15, 8, 8)  # Reduce margins
         
         # Exercise type selection
-        exercise_layout = QHBoxLayout()
         self.exercise_label = QLabel(T.get("exercise_type"))
-        self.exercise_label.setStyleSheet("color: #2c3e50; font-size: 16pt; font-weight: bold;")  # Reduce font size
-        self.exercise_combo = QComboBox()
+        self.exercise_label.setStyleSheet("color: #2c3e50; font-size: 10pt; font-weight: bold;")
+        controls_layout.addWidget(self.exercise_label)
         
+        self.exercise_combo = QComboBox()
         # Set dropdown menu style
         self.exercise_combo.setStyleSheet(AppStyles.get_exercise_combo_style())
         
@@ -199,56 +245,119 @@ class ControlPanel(QWidget):
             self.exercise_combo.setCurrentText(overhead_press_text)
             
         self.exercise_combo.currentTextChanged.connect(self._on_exercise_changed)
+        controls_layout.addWidget(self.exercise_combo)
         
-        exercise_layout.addWidget(self.exercise_label)
-        exercise_layout.addWidget(self.exercise_combo, 1)
-        controls_layout.addLayout(exercise_layout)
+        # Video Source selection
+        video_source_layout = QVBoxLayout()
         
-        # Model selection
-        model_layout = QHBoxLayout()
-        self.model_label = QLabel(T.get("model_type"))
-        self.model_label.setStyleSheet("color: #2c3e50; font-size: 16pt; font-weight: bold;")  # Reduce font size
+        # Title
+        source_title = QLabel(T.get("video_source"))
+        source_title.setStyleSheet("color: #2c3e50; font-size: 10pt; font-weight: bold;")
+        video_source_layout.addWidget(source_title)
         
+        # Source type selector
+        video_source_layout.addWidget(QLabel("类型:"))
+        self.source_type_combo = QComboBox()
+        self.source_type_combo.setStyleSheet(AppStyles.get_exercise_combo_style())
+        self.source_type_combo.addItem("RTSP摄像头", "rtsp")
+        self.source_type_combo.addItem("IP摄像头(HTTP)", "http")
+        video_source_layout.addWidget(self.source_type_combo)
+        
+        # URL/ID input
+        video_source_layout.addWidget(QLabel("地址:"))
+        self.source_url_input = QLineEdit()
+        self.source_url_input.setPlaceholderText("输入RTSP或HTTP地址...")
+        self.source_url_input.setStyleSheet("""
+            QLineEdit {
+                padding: 4px;
+                border: 2px solid #bdc3c7;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+            }
+        """)
+        video_source_layout.addWidget(self.source_url_input)
+        
+        # Connect button
+        button_layout = QHBoxLayout()
+        self.connect_source_btn = QPushButton("连接")
+        self.connect_source_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                padding: 4px 12px;
+                border-radius: 4px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #229954;
+            }
+        """)
+        self.connect_source_btn.clicked.connect(self._on_connect_source)
+        
+        self.source_status_label = QLabel("● 未连接")
+        self.source_status_label.setStyleSheet("color: #7f8c8d; font-size: 9pt;")
+        
+        button_layout.addWidget(self.connect_source_btn)
+        button_layout.addWidget(self.source_status_label)
+        button_layout.addStretch()
+        video_source_layout.addLayout(button_layout)
+        
+        controls_layout.addLayout(video_source_layout)
+        controls_layout.addWidget(self._create_separator())
+        
+        # Model Version Selection
+        model_layout = QVBoxLayout()
+        
+        model_title = QLabel("模型版本:")
+        model_title.setStyleSheet("color: #2c3e50; font-size: 10pt; font-weight: bold;")
+        model_layout.addWidget(model_title)
+        
+        model_select_layout = QVBoxLayout()
+        model_select_layout.addWidget(QLabel("精度:"))
         self.model_combo = QComboBox()
         self.model_combo.setStyleSheet(AppStyles.get_exercise_combo_style())
-        
-        # Add model options
-        for model_code, model_display in self.model_display_map.items():
-            self.model_combo.addItem(model_display, model_code)
-            
-        # Set default model to RTMPose balanced mode
-        rtmpose_balanced_index = list(self.model_display_map.keys()).index("balanced")
-        self.model_combo.setCurrentIndex(rtmpose_balanced_index)
+        self.model_combo.addItem("Lite - 快速（推荐）", "lite")
+        self.model_combo.addItem("Full - 平衡", "full")
+        self.model_combo.addItem("Heavy - 精确（慢）", "heavy")
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
+        model_select_layout.addWidget(self.model_combo)
+        model_layout.addLayout(model_select_layout)
         
-        model_layout.addWidget(self.model_label)
-        model_layout.addWidget(self.model_combo, 1)
         controls_layout.addLayout(model_layout)
+        controls_layout.addWidget(self._create_separator())
         
-        # Camera selection
-        camera_layout = QHBoxLayout()
-        self.camera_label = QLabel(T.get("camera"))
-        self.camera_label.setStyleSheet("color: #2c3e50; font-size: 16pt; font-weight: bold;")  # Reduce font size
+        # TTS Voice Announcement
+        tts_layout = QVBoxLayout()
         
-        self.camera_combo = QComboBox()
-        self.camera_combo.addItems(["0", "1"])
-        self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
-        self.camera_combo.setStyleSheet(AppStyles.get_camera_combo_style())
+        tts_title = QLabel("语音播报:")
+        tts_title.setStyleSheet("color: #2c3e50; font-size: 10pt; font-weight: bold;")
+        tts_layout.addWidget(tts_title)
         
-        camera_layout.addWidget(self.camera_label)
-        camera_layout.addWidget(self.camera_combo, 1)
+        mode_layout = QVBoxLayout()
+        mode_layout.addWidget(QLabel("模式:"))
+        self.tts_mode_combo = QComboBox()
+        self.tts_mode_combo.setStyleSheet(AppStyles.get_exercise_combo_style())
+        self.tts_mode_combo.addItem("🔊 本地音效", "sound")
+        self.tts_mode_combo.addItem("🏠 Home Assistant", "ha")
+        self.tts_mode_combo.currentIndexChanged.connect(self._on_tts_mode_changed)
+        mode_layout.addWidget(self.tts_mode_combo)
+        tts_layout.addLayout(mode_layout)
         
-        # Add spacing
-        spacer = QWidget()
-        spacer.setMinimumHeight(5)
-        controls_layout.addWidget(spacer)
+        # HA配置按钮
+        ha_btn_layout = QHBoxLayout()
+        self.ha_config_btn = QPushButton("⚙ 配置Home Assistant")
+        self.ha_config_btn.clicked.connect(self._open_ha_config)
+        self.ha_config_btn.setEnabled(False)  # 默认禁用
+        ha_btn_layout.addWidget(self.ha_config_btn)
+        tts_layout.addLayout(ha_btn_layout)
         
-        controls_layout.addLayout(camera_layout)
-        
-        # Portrait mode toggle
-        self.rotation_switch = SwitchControl(T.get("rotation_mode"))
-        self.rotation_switch.switched.connect(self._on_rotation_toggled)
-        controls_layout.addWidget(self.rotation_switch)
+        controls_layout.addLayout(tts_layout)
+        controls_layout.addWidget(self._create_separator())
+
         
         # Skeleton display toggle
         self.skeleton_switch = SwitchControl(T.get("skeleton_display"))
@@ -297,7 +406,7 @@ class ControlPanel(QWidget):
 
         controls_layout.addLayout(counter_buttons_layout)
         
-        self.layout.addWidget(self.controls_group)
+        self.content_layout.addWidget(self.controls_group)
     
     def _on_increase_counter(self):
         """Manually increase counter value"""
@@ -420,7 +529,7 @@ class ControlPanel(QWidget):
         spacer.setMinimumHeight(20)
         phase_layout.addWidget(spacer)
         
-        self.layout.addWidget(self.phase_group)
+        self.content_layout.addWidget(self.phase_group)
     
     def _on_exercise_changed(self, exercise_display):
         """Exercise type change handler"""
@@ -437,10 +546,7 @@ class ControlPanel(QWidget):
         """Reset counter handler"""
         self.counter_reset.emit()
     
-    def _on_camera_changed(self, index):
-        """Camera change handler"""
-        self.camera_changed.emit(index)
-    
+
     def _on_rotation_toggled(self, checked):
         """Rotation mode toggle handler"""
         # Send signal
@@ -451,16 +557,106 @@ class ControlPanel(QWidget):
         # Send signal
         self.skeleton_toggled.emit(checked)
     
-    def _on_model_changed(self, index):
-        """RTMPose mode change handler"""
-        # Get currently selected mode
-        model_mode = self.model_combo.currentData()
-        # Emit signal to notify main application
-        self.model_changed.emit(model_mode)
+
     
     def _on_mirror_toggled(self, checked):
-        """Mirror mode toggle handler"""
+        """镜像模式切换处理"""
         self.mirror_toggled.emit(checked)
+    
+    def _create_separator(self):
+        """创建分隔线"""
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("background-color: #bdc3c7;")
+        return separator
+    
+    def _on_connect_source(self):
+        """视频源连接按钮处理"""
+        source_type = self.source_type_combo.currentData()
+        source_input = self.source_url_input.text().strip()
+        
+        # 验证输入
+        if not source_input:
+            if source_type == "camera":
+                source_input = "0"  # 默认摄像头
+            else:
+                self.source_status_label.setText("● 请输入URL")
+                self.source_status_label.setStyleSheet("color: #e74c3c; font-size: 11pt;")
+                return
+        
+        # 更新状态
+        self.source_status_label.setText("● 连接中...")
+        self.source_status_label.setStyleSheet("color: #f39c12; font-size: 11pt;")
+        
+        # 发送信号
+        self.video_source_changed.emit(source_type, source_input)
+    
+    def update_source_status(self, connected, message=""):
+        """更新视频源连接状态"""
+        if connected:
+            status_text = f"● 已连接{(' - ' + message) if message else ''}"
+            self.source_status_label.setText(status_text)
+            self.source_status_label.setStyleSheet("color: #27ae60; font-size: 11pt;")
+        else:
+            status_text = f"● 连接失败{(' - ' + message) if message else ''}"
+            self.source_status_label.setText(status_text)
+            self.source_status_label.setStyleSheet("color: #e74c3c; font-size: 11pt;")
+    
+    def _on_model_changed(self, index):
+        """模型版本切换处理"""
+        model_version = self.model_combo.currentData()
+        print(f"[控制面板] 切换模型版本: {model_version}")
+        self.model_changed.emit(model_version)
+    
+    def _on_tts_mode_changed(self, index):
+        """TTS模式切换处理"""
+        mode = self.tts_mode_combo.currentData()
+        # 根据模式启用/禁用配置按钮
+        self.ha_config_btn.setEnabled(mode == "ha")
+        print(f"[控制面板] 切换TTS模式: {mode}")
+        self.tts_mode_changed.emit(mode)
+    
+    def _open_ha_config(self):
+        """打开HA配置对话框"""
+        from ui.ha_config_dialog import HAConfigDialog
+        import json
+        
+        # 加载当前配置
+        config_path = 'data/tts_config.json'
+        config = {}
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        except:
+            pass
+        
+        # 打开对话框
+        dialog = HAConfigDialog(self, config)
+        if dialog.exec_():
+            # 保存配置
+            ha_config = dialog.get_config()
+            
+            # 确保保留完整配置结构
+            if 'ha_config' not in config:
+                config['ha_config'] = {}
+            
+            # 更新ha_config
+            config['ha_config'].update(ha_config)
+            
+            try:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, ensure_ascii=False, indent=2)
+                print("[控制面板] HA配置已保存")
+                
+                # 重新加载配置到主窗口
+                if hasattr(self.parent(), 'init_tts_manager'):
+                    self.parent().init_tts_manager()
+                    print("[控制面板] TTS配置已重新加载")
+            except Exception as e:
+                print(f"[错误] 保存HA配置失败: {e}")
+                import traceback
+                traceback.print_exc()
     
     def update_counter(self, value):
         """Update counter value"""
@@ -611,11 +807,9 @@ class ControlPanel(QWidget):
         
         self.counter_label.setText(T.get("count_completed"))
         self.exercise_label.setText(T.get("exercise_type"))
-        self.model_label.setText(T.get("model_type"))  
-        self.camera_label.setText(T.get("camera"))
+
         
         # Update switch text
-        self.rotation_switch.label.setText(T.get("rotation_mode"))
         self.skeleton_switch.label.setText(T.get("skeleton_display"))
         self.mirror_switch.label.setText(T.get("mirror_mode"))
         
@@ -630,7 +824,6 @@ class ControlPanel(QWidget):
         
         # Update combo boxes
         self._update_combo_items(self.exercise_combo, self.exercise_display_map)
-        self._update_combo_items(self.model_combo, self.model_display_map)  # Update model selection box
 
     def _update_combo_items(self, combo_box, item_map):
         """Update combo box content"""
@@ -658,3 +851,35 @@ class ControlPanel(QWidget):
                 if combo_box.itemText(i) == current_text:
                     combo_box.setCurrentIndex(i)
                     break
+    
+    def restore_from_settings(self, settings_manager):
+        """Restore control panel UI state from settings"""
+        try:
+            # Restore exercise type
+            saved_exercise = settings_manager.get('exercise_type', 'overhead_press')
+            if saved_exercise in self.exercise_display_map:
+                display_name = self.exercise_display_map[saved_exercise]
+                index = self.exercise_combo.findText(display_name)
+                if index >= 0:
+                    self.exercise_combo.setCurrentIndex(index)
+                    print(f"[ControlPanel] 恢复运动类型: {saved_exercise}")
+            
+            # Restore TTS mode
+            saved_tts = settings_manager.get('tts_mode', 'sound')
+            tts_display_map = {'sound': '本地音效', 'ha': 'HA语音播报'}
+            if saved_tts in tts_display_map:
+                index = self.tts_mode_combo.findText(tts_display_map[saved_tts])
+                if index >= 0:
+                    self.tts_mode_combo.setCurrentIndex(index)
+                    print(f"[ControlPanel] 恢复TTS模式: {saved_tts}")
+            
+            # Restore mirror mode
+            saved_mirror = settings_manager.get('mirror_mode', True)
+            self.mirror_switch.setChecked(saved_mirror)
+            print(f"[ControlPanel] 恢复镜像模式: {saved_mirror}")
+            
+        except Exception as e:
+            print(f"[ControlPanel] 恢复设置失败: {e}")
+            import traceback
+            traceback.print_exc()
+

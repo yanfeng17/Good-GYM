@@ -19,7 +19,7 @@ class VideoThread(QThread):
         self.fps = 30  # Default frame rate
         self.loop_video = False  # Control whether to loop video playback
         self.video_ended = False  # Mark if video has ended
-        self.mirror = False  # Added for mirror mode
+        self.mirror = True  # Default mirror mode on (matches UI switch default)
         self.display_width = display_width
         self.display_height = display_height
         self.inference_width = inference_width
@@ -129,22 +129,107 @@ class VideoThread(QThread):
     
     def run(self):
         """Main thread loop"""
+        # 判断摄像头类型
+        if isinstance(self.camera_id, str):
+            if self.camera_id.lower().startswith('rtsp://'):
+                camera_type = "RTSP摄像头"
+            elif self.camera_id.lower().startswith('http://') or self.camera_id.lower().startswith('https://'):
+                camera_type = "HTTP/IP摄像头"
+            else:
+                camera_type = f"网络摄像头({self.camera_id})"
+        else:
+            camera_type = f"本地摄像头{self.camera_id}"
+        
+        print(f"[视频线程] 开始运行，模式: {camera_type if self.is_camera else '文件'}")
+        
         # Open video source based on mode (camera or file)
         if self.is_camera:
-            self.cap = cv2.VideoCapture(self.camera_id)
-            if not self.cap.isOpened():
-                print(f"Error: Cannot open camera {self.camera_id}")
-                return
+            print(f"[视频线程] 正在打开 {camera_type}...")
+            print(f"[视频线程] 地址: {self.camera_id}")
+            
+            # OpenCV支持RTSP URL和摄像头ID  
+            # 对于RTSP，使用FFmpeg后端并设置参数
+            if isinstance(self.camera_id, str):
+                url_lower = self.camera_id.lower()
                 
-            # Set camera to high resolution for display
+                if url_lower.startswith('rtsp://'):
+                    print("[视频线程] 使用RTSP协议，配置FFmpeg后端...")
+                    
+                    # 设置OpenCV使用TCP而不是UDP（更稳定但延迟略高）
+                    os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp|buffer_size;1024000'
+                    
+                    # 强制使用FFmpeg后端处理RTSP流
+                    self.cap = cv2.VideoCapture(self.camera_id)
+                    
+                    if self.cap.isOpened():
+                        print("[视频线程] RTSP连接成功！")
+                    else:
+                        print("[视频线程] 尝试使用备用参数重新连接...")
+                        self.cap = cv2.VideoCapture(self.camera_id, cv2.CAP_ANY)
+                    
+                    # RTSP优化设置
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 最小化延迟
+                    self.cap.set(cv2.CAP_PROP_FPS, 30)  # 尝试设置更高帧率
+                    
+                elif url_lower.startswith('http://') or url_lower.startswith('https://'):
+                    print("[视频线程] 使用HTTP协议，打开IP摄像头...")
+                    
+                    # HTTP流直接打开，不需要特殊配置
+                    self.cap = cv2.VideoCapture(self.camera_id)
+                    
+                    if self.cap.isOpened():
+                        print("[视频线程] HTTP连接成功！")
+                    else:
+                        print("[视频线程] HTTP连接失败，尝试其他方式...")
+                        self.cap = cv2.VideoCapture(self.camera_id, cv2.CAP_FFMPEG)
+                    
+                    # HTTP优化设置 - 减少缓冲降低延迟
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 最小缓冲减少延迟
+                    print("[视频线程] HTTP缓冲已设置为最小值以减少延迟")
+                else:
+                    # 其他URL格式
+                    print(f"[视频线程] 打开网络流: {self.camera_id}")
+                    self.cap = cv2.VideoCapture(self.camera_id)
+            else:
+                self.cap = cv2.VideoCapture(self.camera_id)
+            
+            if not self.cap.isOpened():
+                print(f"[错误] 无法打开摄像头")
+                if isinstance(self.camera_id, str):
+                    url_lower = self.camera_id.lower()
+                    if url_lower.startswith('rtsp://'):
+                        print(f"[提示] RTSP连接失败，请检查：")
+                        print(f"  1) 网络连接是否正常")
+                        print(f"  2) RTSP地址是否正确")
+                        print(f"  3) 用户名密码是否正确")
+                        print(f"  4) 摄像头是否在线")
+                    elif url_lower.startswith('http://') or url_lower.startswith('https://'):
+                        print(f"[提示] HTTP连接失败，请检查：")
+                        print(f"  1) URL格式: http://IP:端口/路径")
+                        print(f"  2) 网络连接是否正常")
+                        print(f"  3) IP摄像头应用是否运行")
+                        print(f"  4) 端口是否正确(IP Webcam通常是8080)")
+                    else:
+                        print(f"[提示] 网络流连接失败，检查URL格式和网络")
+                else:
+                    print(f"[提示] 请检查：1) 摄像头是否被其他程序占用 2) 摄像头权限 3) 摄像头是否正常工作")
+                return
+            
+            print(f"[视频线程] 摄像头打开成功，正在设置参数...")
+            
+            # Set camera parameters (对RTSP可能无效，但不会出错)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.display_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.display_height)
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, self.buffer_size)
             
-            # Camera mode defaults to rotation (default to portrait mode)
-            self.rotate = True
+            # RTSP摄像头通常不需要旋转
+            if not isinstance(self.camera_id, str):
+                # Camera mode defaults to rotation (default to portrait mode)
+                self.rotate = True
             
-            print(f"Camera opened: ID={self.camera_id}, display_resolution={int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
+            actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            print(f"[视频线程] 摄像头已就绪: 分辨率={actual_width}x{actual_height}")
         else:
             # Open video file
             if not os.path.exists(self.video_file):
@@ -168,11 +253,12 @@ class VideoThread(QThread):
             self.fps = min(real_fps, 30)
             print(f"Frame rate: original {real_fps}fps, current display {self.fps}fps")
         
-        # Initialize FPS calculation
+        # Initialize FPS calculation with moving average
         frame_count = 0
-        start_time = time.time()
+        fps_history = []
+        fps_window = 30  # 使用30帧的移动平均
         fps_display = 0
-        update_interval = 10  # Update FPS display every 10 frames
+        last_fps_time = time.time()
         
         # Run flag
         while self._run_flag:
@@ -188,26 +274,36 @@ class VideoThread(QThread):
                     # 同时旋转推理帧
                     inference_frame = cv2.rotate(inference_frame, cv2.ROTATE_90_CLOCKWISE)
                 
-                # 对显示帧应用镜像（如果需要）
-                if self.mirror:
-                    display_frame = cv2.flip(display_frame, 1)
-                    # 同时镜像推理帧
-                    inference_frame = cv2.flip(inference_frame, 1)
+                # 注意：镜像处理已移至 video_processor.py 中进行
+                # 这里不再应用镜像，避免重复镜像导致效果抵消
                 
                 # 将推理帧存储在主窗口中，供模型使用
                 if hasattr(self.main_window, 'current_inference_frame'):
                     self.main_window.current_inference_frame = inference_frame
                 
-                # Calculate FPS
+                # Calculate FPS using moving average for stability
                 frame_count += 1
-                if frame_count % update_interval == 0:
-                    end_time = time.time()
-                    elapsed_time = end_time - start_time
-                    fps_display = frame_count / elapsed_time
-                    frame_count = 0
-                    start_time = time.time()
+                current_time = time.time()
+                
+                # 计算当前帧的FPS
+                if frame_count > 1:
+                    time_delta = current_time - last_fps_time
+                    if time_delta > 0:  # 避免除零错误
+                        frame_fps = 1.0 / time_delta
+                        fps_history.append(frame_fps)
+                        
+                        # 保持窗口大小
+                        if len(fps_history) > fps_window:
+                            fps_history.pop(0)
+                        
+                        # 使用移动平均得到稳定的FPS
+                        if len(fps_history) > 0:
+                            fps_display = sum(fps_history) / len(fps_history)
+                
+                last_fps_time = current_time
                 
                 # Send display frame and FPS information
+                # 日志已禁用以提升UI性能
                 self.change_pixmap_signal.emit(display_frame, fps_display)
             else:
                 # When reading video file fails, if in video file mode
@@ -232,8 +328,10 @@ class VideoThread(QThread):
                 else:
                     print("Warning: Cannot read video frame")
             
-            # Read frames at target frame rate and control playback speed
-            time.sleep(1/self.fps)  # Limit to specified frame rate
+            # RTSP流不需要sleep限制帧率，否则会造成卡顿
+            # 只对本地视频文件限制帧率
+            if not self.is_camera:
+                time.sleep(1/self.fps)
         
         # Release resources
         self.cap.release()

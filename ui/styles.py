@@ -80,13 +80,13 @@ class AppStyles:
         """Get exercise selection dropdown style"""
         return """
             QComboBox {
-                font-size: 12pt;
-                padding: 2px 8px;
-                min-height: 28px;
-                max-height: 28px;
+                font-size: 10pt;
+                padding: 2px 4px;
+                min-height: 24px;
                 border: 2px solid #bdc3c7;
-                border-radius: 8px;
+                border-radius: 6px;
                 background-color: #ffffff;
+                color: #2c3e50;
             }
             QComboBox:hover {
                 border-color: #3498db;
@@ -94,12 +94,6 @@ class AppStyles:
             QComboBox::drop-down {
                 border: 0px;
                 width: 20px;
-            }
-            QComboBox QAbstractItemView {
-                border: 2px solid #bdc3c7;
-                border-radius: 6px;
-                selection-background-color: #3498db;
-                font-size: 12pt;
             }
         """
     

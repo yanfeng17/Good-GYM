@@ -1,0 +1,23 @@
+{
+    "id": "com.goodgym.app",
+    "version": "1.0.0",
+    "name": "Good-GYM",
+    "name_en": "Good-GYM AI Fitness",
+    "description": "基于MediaPipe姿态检测的AI健身助手",
+    "author": "Good-GYM Team",
+    "category": "Tools",
+    "icon": "icon.png",
+    "main": "docker-compose.yml",
+    "privilege": {
+        "device": [
+            "/dev/video0"
+        ]
+    },
+    "options": {
+        "host_network": false,
+        "webui": {
+            "port": 8080,
+            "index": "/"
+        }
+    }
+}

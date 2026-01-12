@@ -17,16 +17,54 @@ class VideoProcessor:
     def update_image(self, frame, fps=0):
         """更新图像显示并处理姿态检测"""
         try:
+            # 添加调试计数器
+            if not hasattr(self, 'debug_frame_counter'):
+                self.debug_frame_counter = 0
+            self.debug_frame_counter += 1
+            
+            # 每100帧打印一次调试信息
+            if self.debug_frame_counter % 100 == 0:
+                print(f"[VideoProcessor] 已处理 {self.debug_frame_counter} 帧, FPS={fps:.1f}")
+            
             # 更新FPS值
             self.main_window.current_fps = fps
             
-            # 使用推理帧进行姿态检测（如果可用）
+            # 如果 MediaPipe 还未初始化，只显示原始帧
+            if self.main_window.pose_processor is None:
+                # 转换BGR到RGB（Qt需要RGB格式）
+                display_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                self.main_window.video_display.update_image(display_frame)
+                return
+            
+            # 跳帧机制：初始化计数器
+            if not hasattr(self, 'frame_skip_counter'):
+                self.frame_skip_counter = 0
+                self.last_keypoints = None
+                self.last_angle = None
+                self.last_angle_point = None
+            
+            self.frame_skip_counter += 1
+            # 每2帧才处理一次MediaPipe
+            should_process = (self.frame_skip_counter % 2 == 0)
+            
+            # 使用推理帧进行姿态检测
             inference_frame = getattr(self.main_window, 'current_inference_frame', frame)
             
-            # 姿态处理器处理推理帧，获取关键点信息和角度点
-            _, current_angle, angle_point, keypoints = self.main_window.pose_processor.process_frame(
-                inference_frame, self.main_window.exercise_type
-            )
+            # 根据是否需要处理来决定
+            if should_process:
+                # 姿态处理器处理推理帧
+                _, current_angle, angle_point, keypoints = self.main_window.pose_processor.process_frame(
+                    inference_frame, self.main_window.exercise_type
+                )
+                # 保存结果
+                self.last_keypoints = keypoints
+                self.last_angle = current_angle
+                self.last_angle_point = angle_point
+            else:
+                # 使用上一帧的结果
+                keypoints = self.last_keypoints
+                current_angle = self.last_angle
+                angle_point = self.last_angle_point
             
             # 准备高分辨率显示帧
             display_frame = frame.copy()
@@ -86,28 +124,28 @@ class VideoProcessor:
             print(f"Error updating image: {e}")
     
     def draw_skeleton_on_frame(self, frame, keypoints):
-        """在高分辨率帧上绘制骨架"""
+        """在高分辨率帧上绘制骨架（不显示面部）"""
         try:
-            # 定义连接关系 (COCO 17 keypoint format)
+            # 定义连接关系 (MediaPipe 33 keypoint format) - 排除面部连接
             connections = [
-                # Head and face
-                [0, 1], [0, 2], [1, 3], [2, 4],  # nose-eyes-ears
-                # Torso
-                [5, 6],   # left_shoulder-right_shoulder
-                [5, 11],  # left_shoulder-left_hip
-                [6, 12],  # right_shoulder-right_hip
-                [11, 12], # left_hip-right_hip
-                # Arms
-                [5, 7], [7, 9],    # left_shoulder-left_elbow-left_wrist
-                [6, 8], [8, 10],   # right_shoulder-right_elbow-right_wrist
-                # Legs
-                [11, 13], [13, 15], # left_hip-left_knee-left_ankle
-                [12, 14], [14, 16]  # right_hip-right_knee-right_ankle
+                # 躯干
+                [11, 12],  # 左肩-右肩
+                [11, 23], [12, 24],  # 肩-臀
+                [23, 24],  # 左臀-右臀  
+                # 手臂
+                [11, 13], [13, 15],  # 左肩-左肘-左手腕
+                [15, 17], [15, 19], [15, 21],  # 左手指
+                [12, 14], [14, 16],  # 右肩-右肘-右手腕
+                [16, 18], [16, 20], [16, 22],  # 右手指
+                # 腿部
+                [23, 25], [25, 27],  # 左臀-左膝-左脚踝
+                [27, 29], [27, 31],  # 左脚
+                [24, 26], [26, 28],  # 右臀-右膝-右脚踝
+                [28, 30], [28, 32]   # 右脚
             ]
             
             # 定义颜色 (BGR format)
             colors = {
-                'head': (51, 153, 255),    # Blue
                 'torso': (255, 153, 51),   # Orange
                 'arms': (153, 255, 51),    # Green
                 'legs': (255, 51, 153)     # Pink
@@ -124,14 +162,12 @@ class VideoProcessor:
                     if (pt1[0] == 0 and pt1[1] == 0) or (pt2[0] == 0 and pt2[1] == 0):
                         continue
                     
-                    # 选择颜色
-                    if pt1_idx in [0, 1, 2, 3, 4]:  # Head
-                        color = colors['head']
-                    elif pt1_idx in [5, 6, 11, 12]:  # Torso
+                    # 选择颜色（MediaPipe 33 关键点）- 不包含面部
+                    if pt1_idx in [11, 12, 23, 24]:  # 躯干
                         color = colors['torso']
-                    elif pt1_idx in [7, 8, 9, 10]:  # Arms
+                    elif pt1_idx in [13, 14, 15, 16, 17, 18, 19, 20, 21, 22]:  # 手臂和手
                         color = colors['arms']
-                    else:  # Legs
+                    else:  # 腿部 (25-32)
                         color = colors['legs']
                     
                     # 绘制连接线 - 根据分辨率调整线条粗细
@@ -141,19 +177,22 @@ class VideoProcessor:
                             (int(pt2[0]), int(pt2[1])), 
                             color, line_thickness)
             
-            # 绘制关键点
+            # 绘制关键点 - 跳过面部关键点 (0-10)
             for i, point in enumerate(keypoints):
-                if point[0] == 0 and point[1] == 0:  # 跳过无效点
+                # 跳过面部关键点
+                if i < 11:
+                    continue
+                    
+                # 跳过无效点
+                if point[0] == 0 and point[1] == 0:
                     continue
                 
-                # 选择颜色
-                if i in [0, 1, 2, 3, 4]:  # Head
-                    color = colors['head']
-                elif i in [5, 6, 11, 12]:  # Torso
+                # 选择颜色（MediaPipe 33 关键点）
+                if i in [11, 12, 23, 24]:  # 躯干
                     color = colors['torso']
-                elif i in [7, 8, 9, 10]:  # Arms
+                elif i in [13, 14, 15, 16, 17, 18, 19, 20, 21, 22]:  # 手臂和手
                     color = colors['arms']
-                else:  # Legs
+                else:  # 腿部 (25-32)
                     color = colors['legs']
                 
                 # 根据分辨率调整关键点大小
@@ -235,23 +274,26 @@ class VideoProcessor:
             if hasattr(self.main_window.exercise_counter, 'stage'):
                 self.main_window.control_panel.update_phase(self.main_window.exercise_counter.stage)
             
-            # 获取当前计数 - 直接使用计数器属性
+            # 获取当前计数
             current_count = self.main_window.exercise_counter.counter
             
-            # 如果计数增加且不是重置操作，播放声音（但不自动记录）
+            # 只有当计数增加时才更新（用于避免重复更新）
             if current_count > self.main_window.current_count and not self.main_window.is_resetting:
-                # 为每次计数增加播放计数声音
-                self.main_window.sound_manager.play_count_sound()
+                # TTS语音播报（包含音效）
+                exercise_name = self.main_window.control_panel.exercise_display_map.get(
+                    self.main_window.exercise_type, 
+                    self.main_window.exercise_type
+                )
+                self.main_window.announce_count(current_count, exercise_name)
                 
-                # 每10次计数播放成功声音
+                # 达到里程碑（10的倍数）时特殊提示
                 if current_count % 10 == 0:
-                    self.main_window.sound_manager.play_milestone_sound(current_count)
                     self.main_window.statusBar.showMessage(f"Congratulations on completing {current_count} {self.main_window.control_panel.exercise_display_map[self.main_window.exercise_type]}!")
                 
-                # 更新缓存的当前计数
+                # 更新当前计数
                 self.main_window.current_count = current_count
             
-            # 更新计数器显示
+            # 更新UI显示的计数器
             self.main_window.control_panel.update_counter(str(current_count))
         except Exception as e:
             print(f"Error updating image: {str(e)}")
@@ -347,52 +389,3 @@ class VideoProcessor:
         except Exception as e:
             print(f"Error switching to camera mode: {e}")
             self.main_window.statusBar.showMessage(f"Failed to switch to camera mode: {str(e)}")
-    
-    def change_model(self, model_mode):
-        """切换RTMPose模型模式"""
-        try:
-            if model_mode == self.main_window.model_mode:
-                # 如果是相同模式，无需重新加载
-                return
-                
-            # 停止视频处理
-            self.main_window.video_thread.stop()
-            
-            # 显示状态信息
-            self.main_window.statusBar.showMessage(f"Switching RTMPose mode to: {model_mode}...")
-            
-            # 更新模型模式
-            old_model_mode = self.main_window.model_mode
-            self.main_window.model_mode = model_mode
-            
-            print(f"Switching RTMPose mode: {old_model_mode} -> {model_mode}")
-            
-            # 更新RTMPose处理器模式
-            self.main_window.pose_processor.update_model(model_mode)
-            
-            # 重新初始化视频线程
-            self.main_window.setup_video_thread()
-            
-            # 重新启动视频处理
-            QTimer.singleShot(500, self.main_window.start_video)  # 延迟500ms后开始视频
-            
-            # 更新状态栏
-            self.main_window.statusBar.showMessage(f"Switched to RTMPose {model_mode} mode")
-            
-        except Exception as e:
-            # 如果切换失败，显示错误消息
-            error_msg = f"RTMPose mode switching failed: {str(e)}"
-            self.main_window.statusBar.showMessage(error_msg)
-            print(error_msg)
-            
-            # 尝试回滚到原始模式
-            try:
-                self.main_window.model_mode = old_model_mode
-                self.main_window.pose_processor.update_model(old_model_mode)
-                self.main_window.setup_video_thread()
-                QTimer.singleShot(500, self.main_window.start_video)
-                self.main_window.statusBar.showMessage(f"Rolled back to RTMPose {old_model_mode} mode")
-                
-            except:
-                # 如果回滚也失败，显示严重错误
-                self.main_window.statusBar.showMessage("Critical error in RTMPose mode switching") 

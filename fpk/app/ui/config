@@ -1,0 +1,13 @@
+{
+  ".url": {
+    "goodgym.main": {
+      "title": "Good-GYM",
+      "icon": "images/icon-{0}.png",
+      "type": "url",
+      "protocol": "http",
+      "port": "6080",
+      "url": "/",
+      "allUsers": true
+    }
+  }
+}

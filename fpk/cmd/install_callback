@@ -1,0 +1,3 @@
+#!/bin/bash
+# Install callback script
+exit 0

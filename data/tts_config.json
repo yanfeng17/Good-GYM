@@ -1,0 +1,92 @@
+{
+  "mode": "sound",
+  "sound_file": "sounds/success.wav",
+  "ha_enabled": false,
+  "ha_config": {
+    "base_url": "http://192.168.31.45:8123",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1ZjY0ZDdkMjYyMGM0NWFhOGI5YTI4NmM5MTI3YjFkNyIsImlhdCI6MTc2Nzk0NTM1MSwiZXhwIjoyMDgzMzA1MzUxfQ.kqHkfr1z8Pu3Dx18jAU1-79URpnTuTmqPI_plq6xfo8",
+    "service_path": "/api/services/xiaomi_miot/intelligent_speaker",
+    "body_params": [
+      {
+        "key": "entity_id",
+        "type": "string",
+        "value": "media_player.xiaomi_oh2_e77d_play_control",
+        "enabled": true,
+        "use_variables": false
+      },
+      {
+        "key": "text",
+        "type": "string",
+        "value": "第{count}次",
+        "enabled": true,
+        "use_variables": true
+      },
+      {
+        "key": "execute",
+        "type": "boolean",
+        "value": false,
+        "enabled": true,
+        "use_variables": false
+      },
+      {
+        "key": "silent",
+        "type": "boolean",
+        "value": false,
+        "enabled": true,
+        "use_variables": false
+      }
+    ]
+  },
+  "presets": {
+    "xiaomi_speaker_tts": {
+      "name": "小米音箱TTS",
+      "service_path": "/api/services/xiaomi_miot/intelligent_speaker",
+      "body_params": [
+        {
+          "key": "entity_id",
+          "type": "string",
+          "value": "",
+          "enabled": true
+        },
+        {
+          "key": "text",
+          "type": "string",
+          "value": "第{count}次",
+          "enabled": true,
+          "use_variables": true
+        },
+        {
+          "key": "execute",
+          "type": "boolean",
+          "value": false,
+          "enabled": true
+        },
+        {
+          "key": "silent",
+          "type": "boolean",
+          "value": false,
+          "enabled": true
+        }
+      ]
+    },
+    "ha_notification": {
+      "name": "HA通知",
+      "service_path": "/api/services/notify/mobile_app",
+      "body_params": [
+        {
+          "key": "message",
+          "type": "string",
+          "value": "完成{count}个{exercise}",
+          "enabled": true,
+          "use_variables": true
+        },
+        {
+          "key": "title",
+          "type": "string",
+          "value": "运动提醒",
+          "enabled": true
+        }
+      ]
+    }
+  }
+}

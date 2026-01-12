@@ -1,0 +1,10 @@
+{
+  "docker-project": {
+    "projects": [
+      {
+        "name": "goodgym-stack",
+        "path": "docker"
+      }
+    ]
+  }
+}
