@@ -1,12 +1,12 @@
 appname=goodgym
 version=2.0.0
 display_name=Good-GYM AI健身助手
-desc=基于MediaPipe姿态检测的智能健身助手。核心功能：实时AI计数（支持深蹲、俯卧撑等10+种运动）、TTS语音播报、里程碑金币音效、实时骨骼可视化。使用说明：默认调用本地USB摄像头；支持接入网络摄像头，请在Web界面右下角【控制面板】的【视频源】中选择RTSP，并输入地址（格式示例：rtsp://admin:123456@192.168.1.10:554/stream）。
+desc=【项目简介】Good-GYM 是一款基于 AI 姿态检测技术的智能健身助手，支持 Docker 一键部署和 Web 远程访问。\n\n【核心特性】\n1. AI 姿态检测：采用 MediaPipe 实现精准骨骼追踪\n2. 多源视频支持：支持本地 USB 摄像头、RTSP 网络摄像头\n3. 智能语音：TTS 语音播报 + 金币掉落里程碑音效\n4. 数据持久化：自动保存运动类型和摄像头配置\n\n【摄像头配置指南】\n1. 本地摄像头：默认使用 /dev/video0，即插即用。\n2. RTSP 网络摄像头（推荐）：\n   - 在 Web 界面右下角【控制面板】-【视频源】选择 RTSP\n   - 输入地址，例如：rtsp://admin:password@192.168.1.100:554/stream1\n   - 常见品牌格式：海康威视 rtsp://admin:密码@IP:554/h264/ch1/main/av_stream；TP-Link rtsp://admin:密码@IP:554/stream1\n3. 手机摄像头：使用 IP Webcam 等 App 获取 RTSP/HTTP 地址填入。\n\n【使用说明】\n安装后访问 http://[NAS_IP]:6080。选择运动类型（深蹲/俯卧撑等），站在摄像头前即可自动计数。\n\n【项目地址】https://github.com/yanfeng17/Good-GYM
 arch=x86_64
 source=thirdparty
-maintainer=yanfeng17
+maintainer=岩风
 maintainer_url=https://github.com/yanfeng17/Good-GYM
-distributor=yanfeng17
+distributor=岩风
 distributor_url=https://github.com/yanfeng17/Good-GYM
 os_min_version=0.9.0
 desktop_uidir=ui
