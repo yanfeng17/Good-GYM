@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Good-GYM Logo](assets/Logo-ch.png)
+![Good-GYM Logo](fpk/ICON.PNG)
 
 **基于 MediaPipe 姿态检测的智能健身助手 | Docker 一键部署 | 支持 RTSP 摄像头**
 
@@ -10,7 +10,6 @@
 [![Python](https://img.shields.io/badge/python-3.9-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-支持-blue.svg)](https://www.docker.com/)
 
-[English](README.md) | [中文](README_CN.md)
 
 </div>
 
@@ -302,9 +301,8 @@ A: 将您的 MP3 文件替换 `assets/` 目录下的对应文件：
 
 ## 🙏 致谢
 
+- [Good-GYM]https://github.com/yo-WASSUP/Good-GYM
 - [Google MediaPipe](https://mediapipe.dev/) - AI 姿态检测
-- [RTMPose](https://github.com/Tau-J/rtmlib) - 姿态检测模型参考
-- [noVNC](https://github.com/novnc/noVNC) - Web VNC 实现
 
 ## 📄 许可证
 
