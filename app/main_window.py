@@ -344,13 +344,25 @@ class WorkoutTrackerApp(QMainWindow):
         """切换骨架显示"""
         self.video_processor.toggle_skeleton(show)
     
-    def toggle_mirror(self):
+    def toggle_mirror(self, checked=None):
         """Toggle mirror mode"""
-        self.video_processor.toggle_mirror()
-        # Save mirror state
+        # Determine new state: 
+        # 1. Use checked if provided (from direct button click with checkable)
+        # 2. Or toggle existing state from video_thread
+        
+        current_state = False
         if hasattr(self.video_processor, 'video_thread') and self.video_processor.video_thread:
-            mirror_state = self.video_processor.video_thread.mirror
-            self.settings_manager.set('mirror_mode', mirror_state)
+            current_state = self.video_processor.video_thread.mirror
+            
+        if checked is not None and isinstance(checked, bool):
+            new_state = checked
+        else:
+            new_state = not current_state
+            
+        self.video_processor.toggle_mirror(new_state)
+        
+        # Save mirror state
+        self.settings_manager.set('mirror_mode', new_state)
     
     def change_video_source(self, source_type, source_input):
         """切换视频源"""
