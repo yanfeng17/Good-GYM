@@ -32,11 +32,7 @@ Good-GYM 是一款基于 AI 姿态检测技术的智能健身助手，通过摄�
 
 ## 🎥 摄像头配置指南
 
-### 1. 本地 USB 摄像头
-- **Windows/Linux**: 默认使用系统识别到的第一个摄像头（ID=0）。无需配置，即插即用。
-- **Docker**: 一般无法直接使用宿主机 USB 摄像头（除非直通），推荐使用 RTSP 网络摄像头。
-
-### 2. RTSP 网络摄像头（推荐）
+### 1. RTSP 网络摄像头
 
 #### 常见品牌 RTSP 地址格式：
 - **海康威视 (Hikvision)**:
@@ -61,7 +57,7 @@ Good-GYM 是一款基于 AI 姿态检测技术的智能健身助手，通过摄�
        - RTSP_URL=rtsp://admin:password@192.168.1.100:554/stream1
      ```
 
-### 3. 使用手机作为摄像头
+### 2. 使用手机作为摄像头
 - **iOS/Android**: 安装 "IP Webcam" 或 "DroidCam" 应用。
 - 获取 RTSP/HTTP 流地址（例如 `http://192.168.1.5:8080/video`）。
 - 在 Good-GYM 中填写该地址。
