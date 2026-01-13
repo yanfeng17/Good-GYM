@@ -131,7 +131,11 @@ python run.py
 ## 🤝 贡献指南
 欢迎提交 Pull Request！
 
-## 📄 许可证
+## � 致谢
+- [yo-WASSUP/Good-GYM](https://github.com/yo-WASSUP/Good-GYM) - 本项目基于此项目进行开发
+- [Google MediaPipe](https://github.com/google-ai-edge/mediapipe) - 提供强大的姿态检测能力
+
+## �📄 许可证
 [MIT License](LICENSE)
 
 ---
