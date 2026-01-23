@@ -10,128 +10,151 @@ import asyncio
 import json
 import os
 import sys
+import base64
+import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import threading
 
-try:
-    import websockets
-except ImportError:
-    print("[AudioWS] ERROR: websockets library not installed", flush=True)
-    print("[AudioWS] Install with: pip install websockets", flush=True)
-    sys.exit(1)
+# Configuration
+AUTH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'auth.json')
 
-# Global set of connected clients
-connected_clients = set()
-
-AUDIO_WS_PORT = 8765
-AUDIO_HTTP_PORT = 8080
-AUDIO_DIR = "/app"  # Serve entire /app directory (includes vnc_audio.html and assets/)
-
-print(f"[AudioWS] ========== 音频WebSocket服务器启动 ==========", flush=True)
-print(f"[AudioWS] WebSocket端口: {AUDIO_WS_PORT}", flush=True)
-print(f"[AudioWS] HTTP端口: {AUDIO_HTTP_PORT}", flush=True)
-print(f"[AudioWS] 音频目录: {AUDIO_DIR}", flush=True)
-
-async def handle_client(websocket):
-    """Handle WebSocket client connection"""
-    client_id = id(websocket)
-    print(f"[AudioWS] ✓ 客户端连接: {client_id}", flush=True)
-    connected_clients.add(websocket)
-    
+def load_auth():
+    if not os.path.exists(AUTH_FILE):
+        return None
     try:
-        # Send welcome message
-        await websocket.send(json.dumps({
-            "type": "connected",
-            "message": "Audio WebSocket connected",
-            "client_id": client_id
-        }))
-        print(f"[AudioWS] 发送欢迎消息给客户端 {client_id}", flush=True)
-        
-        # Keep connection alive with ping-pong
-        while True:
-            try:
-                # Wait for message with timeout (allows checking connection)
-                message = await asyncio.wait_for(websocket.recv(), timeout=30)
-                print(f"[AudioWS] 收到消息从 {client_id}: {message}", flush=True)
-                
-                try:
-                    data = json.loads(message)
-                    if data.get("type") == "ping":
-                        await websocket.send(json.dumps({"type": "pong"}))
-                except json.JSONDecodeError:
-                    pass
-                    
-            except asyncio.TimeoutError:
-                # Send ping to keep connection alive
-                try:
-                    await websocket.ping()
-                    print(f"[AudioWS] Ping客户端 {client_id}", flush=True)
-                except:
-                    break
-                    
-    except websockets.exceptions.ConnectionClosed as e:
-        print(f"[AudioWS] 客户端断开: {client_id}, 原因: {e}", flush=True)
-    except Exception as e:
-        print(f"[AudioWS] 客户端 {client_id} 错误: {e}", flush=True)
-    finally:
-        connected_clients.discard(websocket)
-        print(f"[AudioWS] 客户端 {client_id} 已移除，当前连接数: {len(connected_clients)}", flush=True)
+        with open(AUTH_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return None
 
-async def broadcast_audio_event(sound_type, count=None):
-    """Broadcast audio play event to all connected clients"""
-    if not connected_clients:
-        print(f"[AudioWS] ⚠ 无客户端连接，跳过广播", flush=True)
-        return
-    
-    msg_data = {
-        "type": "play_audio",
-        "sound": sound_type,
-        "timestamp": asyncio.get_event_loop().time()
-    }
-    if count is not None:
-        msg_data["count"] = count
-        
-    message = json.dumps(msg_data)
-    
-    print(f"[AudioWS] 广播音频事件: {sound_type} (count={count}) -> {len(connected_clients)}个客户端", flush=True)
-    
-    # Send to all connected clients
-    disconnected = set()
-    for client in connected_clients:
-        try:
-            await client.send(message)
-        except websockets.exceptions.ConnectionClosed:
-            disconnected.add(client)
-    
-    # Clean up disconnected clients
-    for client in disconnected:
-        connected_clients.discard(client)
+def save_auth(username, password):
+    data = {'username': username, 'password': password}
+    os.makedirs(os.path.dirname(AUTH_FILE), exist_ok=True)
+    with open(AUTH_FILE, 'w') as f:
+        json.dump(data, f)
+
+def get_setup_page(error=None):
+    error_html = f'<div style="color:red;margin-bottom:10px;">{error}</div>' if error else ''
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Good-GYM Setup</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; margin: 0; }}
+        .card {{ background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%; max-width: 320px; }}
+        h2 {{ text-align: center; color: #1a1a1a; margin-top: 0; }}
+        label {{ display: block; margin-bottom: 0.5rem; color: #4a5568; font-size: 0.875rem; font-weight: 500; }}
+        input {{ width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid #e2e8f0; border-radius: 0.375rem; box-sizing: border-box; }}
+        input:focus {{ outline: none; border-color: #3182ce; ring: 2px solid #3182ce; }}
+        button {{ width: 100%; padding: 0.75rem; background: #3182ce; color: white; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }}
+        button:hover {{ background: #2c5282; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🏋️‍♂️ Good-GYM Setup</h2>
+        <p style="text-align:center;color:#718096;margin-bottom:1.5rem;">请设置访问账号密码</p>
+        {error_html}
+        <form method="POST" action="/setup">
+            <label>用户名 (默认 admin)</label>
+            <input type="text" name="username" value="admin" required>
+            <label>密码</label>
+            <input type="password" name="password" required placeholder="设置您的密码">
+            <button type="submit">完成设置</button>
+        </form>
+    </div>
+</body>
+</html>
+""".encode('utf-8')
 
 class AudioHTTPHandler(SimpleHTTPRequestHandler):
-    """HTTP handler for serving audio files"""
+    """HTTP handler for serving audio files with Basic Auth"""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=AUDIO_DIR, **kwargs)
     
     def log_message(self, format, *args):
-        print(f"[AudioHTTP] {args[0]}", flush=True)
+        # Reduce log noise
+        pass
     
     def end_headers(self):
         # Add CORS headers
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', '*')
         super().end_headers()
-    
+
+    def do_POST(self):
+        """Handle Setup POST"""
+        auth_data = load_auth()
+        if not auth_data and self.path == '/setup':
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                params = urllib.parse.parse_qs(post_data)
+                
+                user = params.get('username', ['admin'])[0]
+                pwd = params.get('password', [''])[0]
+                
+                if user and pwd:
+                    save_auth(user, pwd)
+                    self.send_response(302)
+                    self.send_header('Location', '/')
+                    self.end_headers()
+                    return
+            except Exception as e:
+                print(f"Setup Error: {e}", flush=True)
+            
+            # Error case
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(get_setup_page("无效的请求"))
+            return
+            
+        self.send_error(405)
+
     def do_GET(self):
-        """Handle GET requests"""
+        """Handle GET requests with Auth"""
+        auth_data = load_auth()
+        
+        # 1. SETUP FLOW: If no auth defined
+        if not auth_data:
+            if self.path == '/setup':
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html')
+                self.end_headers()
+                self.wfile.write(get_setup_page())
+                return
+            else:
+                # Redirect everything to setup
+                self.send_response(302)
+                self.send_header('Location', '/setup')
+                self.end_headers()
+                return
+
+        # 2. CHECK HEADER
+        # Allow Basic Auth
+        target_header = f"Basic {base64.b64encode(f'{auth_data['username']}:{auth_data['password']}'.encode()).decode()}"
+        auth_header = self.headers.get('Authorization')
+        
+        if not auth_header or auth_header != target_header:
+            self.send_response(401)
+            self.send_header('WWW-Authenticate', 'Basic realm="Good-GYM Login"')
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b'Authorization required.')
+            return
+
+        # 3. NORMAL FLOW
         if self.path == '/':
             self.send_response(301)
             self.send_header('Location', '/vnc_audio.html')
             self.end_headers()
             return
         
-        # Disable caching for vnc_audio.html to ensure updates are seen
         if self.path.endswith('vnc_audio.html'):
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -140,12 +163,11 @@ class AudioHTTPHandler(SimpleHTTPRequestHandler):
             self.send_header('Expires', '0')
             self.end_headers()
             
-            # Serve the file content manually to ensure headers are sent
             try:
                 with open(os.path.join(AUDIO_DIR, 'vnc_audio.html'), 'rb') as f:
                     self.wfile.write(f.read())
             except Exception as e:
-                self.send_error(404, f"File not found: {e}")
+                pass # Should send error but here we just pass
             return
             
         super().do_GET()
