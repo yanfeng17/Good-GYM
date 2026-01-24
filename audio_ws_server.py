@@ -46,7 +46,13 @@ def load_auth():
     try:
         with open(AUTH_FILE, "r", encoding="utf-8") as file_handle:
             data = json.load(file_handle)
-        if isinstance(data, dict) and data.get("username"):
+        if not isinstance(data, dict):
+            return None
+        if not data.get("username"):
+            return None
+        if data.get("password_hash") and data.get("salt"):
+            return data
+        if data.get("password"):
             return data
     except Exception:
         return None

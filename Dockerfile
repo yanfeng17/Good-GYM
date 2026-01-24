@@ -75,6 +75,7 @@ COPY . .
 # Store default data files in /app/data_default (survives volume mount)
 # At runtime, these will be copied to /app/data if that directory is empty
 RUN cp -r /app/data /app/data_default && \
+    rm -f /app/data_default/auth.json && \
     echo "Default data files stored in /app/data_default" && \
     ls -la /app/data_default/
 

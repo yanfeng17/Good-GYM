@@ -1,6 +1,6 @@
 services:
   goodgym:
-    image: crpi-e3vuk2tn55669vwt.cn-shenzhen.personal.cr.aliyuncs.com/yan_feng/goodgym:latest
+    image: crpi-e3vuk2tn55669vwt.cn-shenzhen.personal.cr.aliyuncs.com/yan_feng/goodgym:2.0.1
     container_name: goodgym
     ports:
       - "6080:8080"  # Audio Web (Main Entry)
