@@ -1,0 +1,303 @@
+import numpy as np
+from collections import deque
+import time
+import json
+import os
+import sys
+
+class ExerciseCounter:
+    """Basic exercise counter with angle-based detection"""
+    
+    def __init__(self, smoothing_window=5):
+        # Core counting variables
+        self.counter = 0
+        self.stage = None
+        
+        # Basic features
+        self.smoothing_window = smoothing_window
+        self.angle_history = deque(maxlen=smoothing_window)
+        self.last_count_time = 0
+        self.min_rep_time = 0.5  # Minimum time between reps (seconds)
+        
+        # Exercise configurations
+        self.exercise_configs = self.get_exercise_configs()
+        
+        # Independent counting for leg exercises - load from config
+        self.leg_exercises = [
+            exercise_type for exercise_type, config in self.exercise_configs.items()
+            if config.get('is_leg_exercise', False)
+        ]
+        self.leg_stages = {'left': None, 'right': None}  # Track each leg's stage
+    
+    def get_exercises_file_path(self):
+        """Get exercises.json file path, compatible with development and packaged environments"""
+        import os
+        
+        # Debug: Print current working directory
+        cwd = os.getcwd()
+        print(f"[ExerciseCounter] 当前工作目录: {cwd}")
+        print(f"[ExerciseCounter] sys.frozen = {getattr(sys, 'frozen', False)}")
+        
+        if getattr(sys, 'frozen', False):
+            # Packaged environment
+            exe_dir = os.path.dirname(sys.executable)
+            external_file = os.path.join(exe_dir, 'data', 'exercises.json')
+            if os.path.exists(external_file):
+                return external_file
+            base_path = sys._MEIPASS
+            exercises_file = os.path.join(base_path, 'data', 'exercises.json')
+        else:
+            # Development or Docker environment
+            # First try absolute path for Docker container
+            docker_path = '/app/data/exercises.json'
+            print(f"[ExerciseCounter] 检查Docker路径: {docker_path}, 存在={os.path.exists(docker_path)}")
+            
+            if os.path.exists(docker_path):
+                print(f"[ExerciseCounter] OK 使用Docker路径: {docker_path}")
+                return docker_path
+            
+            # Fall back to relative path for local development
+            exercises_file = os.path.join('data', 'exercises.json')
+            print(f"[ExerciseCounter] 检查相对路径: {exercises_file}, 存在={os.path.exists(exercises_file)}")
+        
+        print(f"[ExerciseCounter] 最终使用路径: {exercises_file}")
+        return exercises_file
+    
+    def get_exercise_configs(self):
+        """Load exercise-specific angle thresholds from JSON file"""
+        print("[ExerciseCounter] ========== 开始加载运动配置 ==========")
+        exercises_file = self.get_exercises_file_path()
+        
+        try:
+            print(f"[ExerciseCounter] 尝试打开文件: {exercises_file}")
+            if os.path.exists(exercises_file):
+                with open(exercises_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    print(f"[ExerciseCounter] 文件内容长度: {len(content)} 字符")
+                    data = json.loads(content)
+                    exercises = data.get('exercises', {})
+                    
+                    # Convert to the format expected by the rest of the code
+                    configs = {}
+                    for exercise_type, config in exercises.items():
+                        configs[exercise_type] = {
+                            'down_angle': config.get('down_angle'),
+                            'up_angle': config.get('up_angle'),
+                            'keypoints': config.get('keypoints', {}),
+                            'is_leg_exercise': config.get('is_leg_exercise', False)
+                        }
+                    
+                    print(f"[ExerciseCounter] OK 成功加载 {len(configs)} 个运动类型: {list(configs.keys())}")
+                    print("[ExerciseCounter] ========== 运动配置加载完成 ==========")
+                    return configs
+            else:
+                print(f"[ExerciseCounter] ERR 错误: 文件不存在 {exercises_file}")
+                # List directory contents for debugging
+                parent_dir = os.path.dirname(exercises_file) or '.'
+                if os.path.exists(parent_dir):
+                    print(f"[ExerciseCounter] 目录 {parent_dir} 内容: {os.listdir(parent_dir)}")
+                else:
+                    print(f"[ExerciseCounter] 目录 {parent_dir} 不存在")
+                return {}
+        except Exception as e:
+            print(f"[ExerciseCounter] ERR 加载异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+    
+    def reset_counter(self):
+        """Reset counter to initial state"""
+        self.counter = 0
+        self.stage = None
+        self.angle_history.clear()
+        self.leg_stages = {'left': None, 'right': None}
+    
+    def calculate_angle(self, a, b, c):
+        """Calculate angle between three points"""
+        try:
+            a = np.array(a, dtype=np.float64)
+            b = np.array(b, dtype=np.float64)
+            c = np.array(c, dtype=np.float64)
+            
+            # Check for invalid points
+            if np.any(np.isnan([a, b, c])) or np.any([a, b, c] == [0, 0]):
+                return None
+            
+            # Calculate vectors
+            ba = a - b
+            bc = c - b
+            
+            # Check for zero vectors
+            ba_norm = np.linalg.norm(ba)
+            bc_norm = np.linalg.norm(bc)
+            
+            if ba_norm == 0 or bc_norm == 0:
+                return None
+            
+            # Calculate angle using dot product
+            cosine_angle = np.dot(ba, bc) / (ba_norm * bc_norm)
+            cosine_angle = np.clip(cosine_angle, -1.0, 1.0)  # Prevent numerical errors
+            angle = np.arccos(cosine_angle)
+            
+            return np.degrees(angle)
+            
+        except Exception as e:
+            print(f"Angle calculation error: {e}")
+            return None
+    
+    def smooth_angle(self, angle):
+        """Apply smoothing to reduce noise"""
+        if angle is None:
+            return None
+            
+        self.angle_history.append(angle)
+        
+        if len(self.angle_history) < 3:
+            return angle
+            
+        # Use median filter to remove outliers, then average
+        angles_array = np.array(list(self.angle_history))
+        median_angle = np.median(angles_array)
+        
+        # Remove outliers (angles > 2 std devs from median)
+        std_dev = np.std(angles_array)
+        filtered_angles = angles_array[np.abs(angles_array - median_angle) <= 2 * std_dev]
+        
+        return np.mean(filtered_angles) if len(filtered_angles) > 0 else angle
+    
+    def check_rep_timing(self):
+        """Prevent counting reps too quickly"""
+        current_time = time.time()
+        if current_time - self.last_count_time < self.min_rep_time:
+            return False
+        return True
+    
+    def count_exercise(self, keypoints, exercise_type):
+        """Generic exercise counting function"""
+        try:
+            if exercise_type not in self.exercise_configs:
+                print(f"Unknown exercise type: {exercise_type}")
+                return None
+                
+            config = self.exercise_configs[exercise_type]
+            kp = config['keypoints']
+            
+            # Calculate angles for both sides
+            left_angle = self.calculate_angle(
+                keypoints[kp['left'][0]],  # first point
+                keypoints[kp['left'][1]],  # middle point
+                keypoints[kp['left'][2]]   # last point
+            )
+            
+            right_angle = self.calculate_angle(
+                keypoints[kp['right'][0]],  # first point
+                keypoints[kp['right'][1]],  # middle point
+                keypoints[kp['right'][2]]   # last point
+            )
+            
+            if left_angle is None or right_angle is None:
+                return None
+            
+            # Handle leg exercises differently
+            if exercise_type in self.leg_exercises:
+                return self.count_leg_exercise(left_angle, right_angle, config)
+            
+            # For other exercises, use average angle
+            avg_angle = (left_angle + right_angle) / 2
+            smoothed_angle = self.smooth_angle(avg_angle)
+            
+            if smoothed_angle is None:
+                return None
+            
+            # Get thresholds
+            up_threshold = config['up_angle']
+            down_threshold = config['down_angle']
+            
+            # Counting logic with timing check
+            if smoothed_angle > up_threshold:
+                if self.stage != "up":
+                    print(f"[计数器] {exercise_type} 阶段变为UP, 角度={smoothed_angle:.1f} deg")
+                self.stage = "up"
+            elif (smoothed_angle < down_threshold and 
+                  self.stage == "up" and 
+                  self.check_rep_timing()):
+                
+                self.stage = "down"
+                self.counter += 1
+                self.last_count_time = time.time()
+                print(f"[计数器] OK {exercise_type} 计数+1，当前={self.counter}, 角度={smoothed_angle:.1f} deg")
+                
+            return smoothed_angle
+            
+        except Exception as e:
+            print(f"Exercise counting error: {e}")
+            return None
+    
+    def count_leg_exercise(self, left_angle, right_angle, config):
+        """Count leg exercises with complete up-down cycles"""
+        up_threshold = config['up_angle']
+        down_threshold = config['down_angle']
+        
+        # Check if either leg meets the criteria
+        if self.check_rep_timing():
+            # Left leg
+            if left_angle > up_threshold:
+                self.leg_stages['left'] = "up"
+            elif (left_angle < down_threshold and 
+                  self.leg_stages['left'] == "up"):
+                self.counter += 1
+                self.last_count_time = time.time()
+                self.leg_stages['left'] = "down"
+            
+            # Right leg
+            if right_angle > up_threshold:
+                self.leg_stages['right'] = "up"
+            elif (right_angle < down_threshold and 
+                  self.leg_stages['right'] == "up"):
+                self.counter += 1
+                self.last_count_time = time.time()
+                self.leg_stages['right'] = "down"
+        
+        # Return average angle for display purposes
+        return (left_angle + right_angle) / 2
+    
+    # Wrapper functions for different exercises
+    def count_squat(self, keypoints):
+        """Count squat repetitions"""
+        return self.count_exercise(keypoints, 'squat')
+    
+    def count_pushup(self, keypoints):
+        """Count pushup repetitions"""
+        return self.count_exercise(keypoints, 'pushup')
+    
+    def count_situp(self, keypoints):
+        """Count situp repetitions"""
+        return self.count_exercise(keypoints, 'situp')
+    
+    def count_bicep_curl(self, keypoints):
+        """Count bicep curl repetitions"""
+        return self.count_exercise(keypoints, 'bicep_curl')
+    
+    def count_lateral_raise(self, keypoints):
+        """Count lateral raise repetitions"""
+        return self.count_exercise(keypoints, 'lateral_raise')
+    
+    def count_overhead_press(self, keypoints):
+        """Count overhead press repetitions"""
+        return self.count_exercise(keypoints, 'overhead_press')
+    
+    def count_leg_raise(self, keypoints):
+        """Count leg raise repetitions"""
+        return self.count_exercise(keypoints, 'leg_raise')
+    
+    def count_knee_raise(self, keypoints):
+        """Count knee raise repetitions"""
+        return self.count_exercise(keypoints, 'knee_raise')
+    
+    def count_knee_press(self, keypoints):
+        """Count knee press repetitions"""
+        return self.count_exercise(keypoints, 'knee_press')
+    
+    def count_crunch(self, keypoints):
+        """Count crunch repetitions"""
+        return self.count_exercise(keypoints, 'crunch')

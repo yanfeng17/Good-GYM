@@ -1,0 +1,37 @@
+#!/bin/bash
+
+FILE_PATH="${TRIM_APPDEST}/docker/docker-compose.yaml"
+
+is_docker_running () {
+    DOCKER_NAME=""
+    if [ -f "$FILE_PATH" ]; then
+        DOCKER_NAME=$(cat $FILE_PATH | grep "container_name" | awk -F ':' '{print $2}' | xargs)
+        echo "DOCKER_NAME is set to: $DOCKER_NAME"
+    fi
+    if [ -n "$DOCKER_NAME" ]; then
+        docker inspect $DOCKER_NAME | grep -q "\"Status\": \"running\"," || exit 1
+        return
+    fi
+}
+
+case $1 in
+start)
+    # Docker application will be started by appcenter
+    exit 0
+    ;;
+stop)
+    # Docker application will be stopped by appcenter
+    exit 0
+    ;;
+status)
+    # Check if container is running
+    if is_docker_running; then
+        exit 0
+    else
+        exit 3
+    fi
+    ;;
+*)
+    exit 1
+    ;;
+esac

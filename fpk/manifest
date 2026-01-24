@@ -1,0 +1,15 @@
+appname=goodgym
+version=2.0.1
+display_name=Good-GYM AI健身助手
+desc=<p>🏋️‍♂️ Good-GYM 是一款基于 MediaPipe 姿态检测的智能健身助手，通过 RTSP 连接摄像头实时计数与反馈。</p><h4>✨ 核心功能</h4><ul><li>🤖 <b>AI 姿态识别</b>：基于 MediaPipe 精准捕捉 33 个身体关键点</li><li>📊 <b>精准计数</b>：支持深蹲、俯卧撑、卷腹、弯举等 10 种运动</li><li>🔊 <b>语音激励</b>：实时 TTS 报数 + 每 10 次金币音效奖励</li><li>📹 <b>RTSP 支持</b>：兼容海康/TP-Link/小米及手机 IP 摄像头</li><li>🌐 <b>Web 可视化</b>：浏览器实时查看骨骼追踪与角度分析</li></ul><h4>💬 交流反馈</h4><p>欢迎访问 GitHub 项目主页，或前往 <a href="https://club.fnnas.com/forum.php?mod=viewthread&tid=50897">飞牛论坛专贴</a> 交流反馈。</p>
+arch=x86_64
+source=thirdparty
+maintainer=岩风
+maintainer_url=https://github.com/yanfeng17/Good-GYM
+distributor=岩风
+distributor_url=https://github.com/yanfeng17/Good-GYM
+os_min_version=0.9.0
+desktop_uidir=ui
+desktop_applaunchname=goodgym.main
+service_port=6080
+checkport=true

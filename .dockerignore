@@ -1,0 +1,9 @@
+.git
+.gitignore
+venv
+__pycache__
+*.pdf
+*.log
+.DS_Store
+.idea
+.vscode

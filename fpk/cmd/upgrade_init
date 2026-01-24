@@ -1,0 +1,3 @@
+#!/bin/bash
+# Upgrade initialization script
+exit 0

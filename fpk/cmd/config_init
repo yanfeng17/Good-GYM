@@ -1,0 +1,3 @@
+#!/bin/bash
+# Config initialization script
+exit 0

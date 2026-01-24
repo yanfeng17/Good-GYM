@@ -1,0 +1,17 @@
+services:
+  goodgym:
+    image: crpi-e3vuk2tn55669vwt.cn-shenzhen.personal.cr.aliyuncs.com/yan_feng/goodgym:latest
+    container_name: goodgym
+    ports:
+      - "6080:8080"  # Audio Web (Main Entry)
+      - "6081:6081"  # noVNC Frame
+      - "8765:8765"  # WebSocket Audio
+    volumes:
+      - ${APPDATADIR}/data:/app/data
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    environment:
+      - RESOLUTION=1280x800
+    restart: unless-stopped
